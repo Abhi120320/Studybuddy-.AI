@@ -1,0 +1,337 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+  
+  body {
+    font-family: 'Courier New', monospace;
+    background: #0a0e27;
+    color: #00ff41;
+    line-height: 1.6;
+  }
+  
+  .container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 20px;
+  }
+  
+  header {
+    background: linear-gradient(135deg, #1a1a2e 0%, #0f3460 100%);
+    border: 2px solid #00ff41;
+    border-radius: 10px;
+    padding: 30px;
+    margin-bottom: 30px;
+    box-shadow: 0 0 20px rgba(0, 255, 65, 0.3);
+  }
+  
+  header h1 {
+    font-size: 2.5em;
+    color: #00ff41;
+    text-shadow: 0 0 10px #00ff41;
+    margin-bottom: 10px;
+  }
+  
+  header p {
+    color: #00d4ff;
+    font-size: 1.1em;
+  }
+  
+  .main-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-bottom: 20px;
+  }
+  
+  .section {
+    background: #16213e;
+    border: 2px solid #00ff41;
+    border-radius: 10px;
+    padding: 25px;
+    box-shadow: 0 0 15px rgba(0, 255, 65, 0.2);
+  }
+  
+  .section h2 {
+    color: #00ff41;
+    margin-bottom: 20px;
+    font-size: 1.5em;
+    border-bottom: 2px solid #00ff41;
+    padding-bottom: 10px;
+  }
+  
+  .section h3 {
+    color: #00d4ff;
+    margin-top: 15px;
+    margin-bottom: 10px;
+  }
+  
+  .form-group {
+    margin-bottom: 15px;
+  }
+  
+  label {
+    display: block;
+    color: #00ff41;
+    margin-bottom: 5px;
+    font-weight: bold;
+  }
+  
+  input[type="file"],
+  input[type="text"],
+  input[type="number"],
+  select,
+  textarea {
+    width: 100%;
+    padding: 12px;
+    background: #0f3460;
+    border: 2px solid #00ff41;
+    color: #00ff41;
+    border-radius: 5px;
+    font-family: 'Courier New', monospace;
+    font-size: 1em;
+    transition: all 0.3s;
+  }
+  
+  input[type="file"]:focus,
+  input[type="text"]:focus,
+  input[type="number"]:focus,
+  select:focus,
+  textarea:focus {
+    outline: none;
+    border-color: #00d4ff;
+    box-shadow: 0 0 10px rgba(0, 212, 255, 0.5);
+    background: #1a2847;
+  }
+  
+  button {
+    background: linear-gradient(135deg, #00ff41 0%, #00d4ff 100%);
+    color: #0a0e27;
+    padding: 12px 25px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 1em;
+    transition: all 0.3s;
+    box-shadow: 0 0 10px rgba(0, 255, 65, 0.3);
+    width: 100%;
+  }
+  
+  button:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 0 20px rgba(0, 255, 65, 0.6);
+  }
+  
+  button:active {
+    transform: translateY(0);
+  }
+  
+  .loading {
+    display: none;
+    text-align: center;
+    color: #00d4ff;
+    margin: 15px 0;
+  }
+  
+  .spinner {
+    border: 3px solid #1a2847;
+    border-top: 3px solid #00ff41;
+    border-radius: 50%;
+    width: 30px;
+    height: 30px;
+    animation: spin 1s linear infinite;
+    margin: 0 auto;
+  }
+  
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+  
+  .output {
+    background: #0f3460;
+    border: 2px solid #00d4ff;
+    border-radius: 5px;
+    padding: 15px;
+    margin-top: 15px;
+    max-height: 400px;
+    overflow-y: auto;
+    display: none;
+    box-shadow: inset 0 0 10px rgba(0, 212, 255, 0.2);
+  }
+  
+  .output.show {
+    display: block;
+  }
+  
+  .output h3 {
+    color: #00d4ff;
+    margin-bottom: 10px;
+  }
+  
+  .question-card {
+    background: #1a2847;
+    border-left: 4px solid #00ff41;
+    padding: 15px;
+    margin: 10px 0;
+    border-radius: 5px;
+    box-shadow: 0 0 10px rgba(0, 255, 65, 0.1);
+  }
+  
+  .question-card strong {
+    color: #00ff41;
+    display: block;
+    margin-bottom: 10px;
+  }
+  
+  .question-card .options {
+    margin-left: 20px;
+    color: #00d4ff;
+  }
+  
+  .option {
+    display: flex;
+    align-items: center;
+    margin: 8px 0;
+    cursor: pointer;
+  }
+  
+  .option input {
+    margin-right: 10px;
+    cursor: pointer;
+    accent-color: #00ff41;
+  }
+  
+  .option label {
+    margin: 0;
+    cursor: pointer;
+    color: #00d4ff;
+  }
+  
+  .explanation {
+    background: #0f3460;
+    border: 1px solid #00ff41;
+    padding: 10px;
+    margin-top: 10px;
+    border-radius: 5px;
+    color: #00ff41;
+    font-size: 0.9em;
+  }
+  
+  .success {
+    background: rgba(0, 255, 65, 0.1);
+    border-left: 4px solid #00ff41;
+    color: #00ff41;
+    padding: 12px;
+    border-radius: 5px;
+    margin: 10px 0;
+  }
+  
+  .error {
+    background: rgba(255, 0, 0, 0.1);
+    border-left: 4px solid #ff0000;
+    color: #ff6b6b;
+    padding: 12px;
+    border-radius: 5px;
+    margin: 10px 0;
+  }
+  
+  .tabs {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
+  
+  .tab-button {
+    padding: 10px 15px;
+    background: #0f3460;
+    border: 2px solid #00ff41;
+    color: #00ff41;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: all 0.3s;
+    font-family: 'Courier New', monospace;
+    font-weight: bold;
+    width: auto;
+  }
+  
+  .tab-button:hover {
+    background: #1a2847;
+  }
+  
+  .tab-button.active {
+    background: #00ff41;
+    color: #0a0e27;
+    box-shadow: 0 0 15px rgba(0, 255, 65, 0.5);
+  }
+  
+  .status {
+    background: rgba(0, 212, 255, 0.1);
+    border-left: 4px solid #00d4ff;
+    border-radius: 5px;
+    padding: 12px;
+    margin-bottom: 15px;
+    font-size: 0.9em;
+    color: #00d4ff;
+  }
+  
+  #chatMessages {
+    background: #0f3460;
+    border: 2px solid #00d4ff;
+    border-radius: 5px;
+    padding: 15px;
+    height: 250px;
+    overflow-y: auto;
+    margin-bottom: 10px;
+    font-size: 0.9em;
+    box-shadow: inset 0 0 10px rgba(0, 212, 255, 0.2);
+  }
+  
+  .chat-message-user {
+    margin: 10px 0;
+    padding: 10px;
+    background: rgba(0, 255, 65, 0.1);
+    border-left: 3px solid #00ff41;
+    border-radius: 5px;
+    color: #00ff41;
+  }
+  
+  .chat-message-ai {
+    margin: 10px 0;
+    padding: 10px;
+    background: rgba(0, 212, 255, 0.1);
+    border-left: 3px solid #00d4ff;
+    border-radius: 5px;
+    color: #00d4ff;
+  }
+  
+  ::-webkit-scrollbar {
+    width: 10px;
+  }
+  
+  ::-webkit-scrollbar-track {
+    background: #0f3460;
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    background: #00ff41;
+    border-radius: 5px;
+  }
+  
+  ::-webkit-scrollbar-thumb:hover {
+    background: #00d4ff;
+  }
+  
+  @media (max-width: 1024px) {
+    .main-grid {
+      grid-template-columns: 1fr;
+    }
+  
+    header h1 {
+      font-size: 1.8em;
+    }
+  }
+  

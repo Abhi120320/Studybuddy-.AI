@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Study Buddy AI</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <!-- HEADER -->
+    <header>
+      <h1>🎯 STUDY BUDDY AI</h1>
+      <p>> Advanced AI-Powered Exam Preparation System</p>
+    </header>
+
+    <!-- MAIN GRID -->
+    <div class="main-grid">
+      <!-- LEFT SECTION -->
+      <div class="section">
+        <h2>📖 UPLOAD NOTES</h2>
+        <div class="form-group">
+          <label for="pdfFile">Select PDF:</label>
+          <input type="file" id="pdfFile" accept=".pdf" />
+        </div>
+        <button onclick="uploadPDF()">▶ UPLOAD & EXTRACT</button>
+        <div class="loading" id="uploadLoading">
+          <div class="spinner"></div>
+          <p>> Processing PDF...</p>
+        </div>
+        <div class="status" id="uploadStatus" style="display: none;"></div>
+
+        <hr style="margin: 20px 0; border: none; border-top: 2px solid #00ff41;">
+
+        <h2 style="margin-top: 20px;">⚙️ TOOLS</h2>
+        
+        <div class="form-group">
+          <label for="topic">Topic to Summarize:</label>
+          <input type="text" id="topic" placeholder="e.g., Limits and Derivatives" />
+        </div>
+        <button onclick="generateSummary()">▶ SUMMARIZE</button>
+
+        <div class="form-group" style="margin-top: 15px;">
+          <label for="daysUntilExam">Days Until Exam:</label>
+          <input type="number" id="daysUntilExam" value="7" min="1" max="30" />
+        </div>
+        <button onclick="generateSchedule()">▶ CREATE SCHEDULE</button>
+
+        <div class="loading" id="toolLoading">
+          <div class="spinner"></div>
+          <p>> Processing...</p>
+        </div>
+
+        <div class="output" id="toolOutput"></div>
+      </div>
+
+      <!-- RIGHT SECTION -->
+      <div class="section">
+        <h2>🧠 PRACTICE</h2>
+
+        <div class="tabs">
+          <button class="tab-button active" onclick="switchTab('questions')">Questions</button>
+          <button class="tab-button" onclick="switchTab('exam')">Exam</button>
+          <button class="tab-button" onclick="switchTab('chat')">Chat</button>
+        </div>
+
+        <!-- QUESTIONS TAB -->
+        <div id="questionsTab">
+          <div class="form-group">
+            <label for="difficulty">Difficulty:</label>
+            <select id="difficulty">
+              <option value="easy">Easy</option>
+              <option value="medium" selected>Medium</option>
+              <option value="hard">Hard</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="questionCount">Questions:</label>
+            <input type="number" id="questionCount" value="5" min="1" max="20" />
+          </div>
+          <button onclick="generateQuestions()">▶ GENERATE</button>
+          <div class="loading" id="questionLoading">
+            <div class="spinner"></div>
+          </div>
+          <div class="output" id="questionsOutput"></div>
+        </div>
+
+        <!-- EXAM TAB -->
+        <div id="examTab" style="display: none;">
+          <div class="form-group">
+            <label for="examQuestions">Questions:</label>
+            <input type="number" id="examQuestions" value="10" min="5" max="20" />
+          </div>
+          <button onclick="generateMockExam()">▶ START EXAM</button>
+          <div class="loading" id="examLoading">
+            <div class="spinner"></div>
+          </div>
+          <div class="output" id="examOutput"></div>
+        </div>
+
+        <!-- CHAT TAB -->
+        <div id="chatTab" style="display: none;">
+          <div id="chatMessages"></div>
+          <div class="form-group">
+            <input type="text" id="chatInput" placeholder="Ask your question..." onkeypress="handleChatKeypress(event)" />
+          </div>
+          <button onclick="sendChatMessage()" style="width: 100%;">▶ SEND</button>
+          <div class="loading" id="chatLoading">
+            <div class="spinner"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>

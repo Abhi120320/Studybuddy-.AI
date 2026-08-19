@@ -1,0 +1,102 @@
+:root {
+  --background: #fffdf5;
+  --foreground: #1e293b;
+  --muted: #f1f5f9;
+  --muted-foreground: #64748b;
+  --accent: #8b5cf6;
+  --accent-foreground: #ffffff;
+  --secondary: #f472b6;
+  --tertiary: #fbbf24;
+  --quaternary: #34d399;
+  --border: #e2e8f0;
+  --input: #ffffff;
+  --card: #ffffff;
+  --ring: #8b5cf6;
+
+  --color-bg: var(--background);
+  --color-bg-light: var(--background);
+  --color-bg-white: var(--card);
+  --color-text-dark: var(--foreground);
+  --color-text-muted: var(--muted-foreground);
+  --color-primary: var(--accent);
+  --color-primary-hover: #7c3aed;
+  --color-primary-soft: #ede9fe;
+  --color-accent: var(--quaternary);
+  --color-accent-soft: #d1fae5;
+  --color-border: var(--border);
+  --color-success: #059669;
+  --color-danger: #dc2626;
+  --color-surface: var(--card);
+
+  --font-display: 'Outfit', system-ui, sans-serif;
+  --font-body: 'Plus Jakarta Sans', system-ui, sans-serif;
+  --ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  --radius-sm: 8px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
+  --radius-xl: 24px;
+  --radius-full: 9999px;
+  --border-width: 2px;
+
+  --shadow-pop: 4px 4px 0 0 var(--foreground);
+  --shadow-pop-hover: 6px 6px 0 0 var(--foreground);
+  --shadow-pop-active: 2px 2px 0 0 var(--foreground);
+  --shadow-sticker: 8px 8px 0 0 var(--border);
+  --shadow-sticker-pink: 8px 8px 0 0 var(--secondary);
+
+  --sidebar-width: 260px;
+  --topbar-height: 72px;
+  --container: 72rem;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--font-body);
+  background-color: var(--background);
+  color: var(--foreground);
+  line-height: 1.6;
+  font-weight: 500;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+}
+
+a { color: inherit; }
+
+button, input, select, textarea {
+  font-family: inherit;
+}
+
+:focus-visible {
+  outline: 3px solid var(--ring);
+  outline-offset: 3px;
+}
+
+::selection {
+  background: var(--tertiary);
+  color: var(--foreground);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
