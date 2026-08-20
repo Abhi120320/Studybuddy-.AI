@@ -335,7 +335,7 @@
   border-radius: 50%;
   left: -40px;
   top: -20px;
-  z-index: 0;
+  z-index: -1;
   box-shadow: 8px 8px 0 var(--foreground);
 }
 
