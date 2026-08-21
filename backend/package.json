@@ -22,7 +22,8 @@
         "multer": "^1.4.5-lts.1",
         "nodemailer": "^9.0.5",
         "pdf-parse": "^1.1.1",
-        "pg": "^8.23.0"
+        "pg": "^8.23.0",
+        "resend": "^4.0.0"
     },
     "devDependencies": {
         "nodemon": "^3.0.2"

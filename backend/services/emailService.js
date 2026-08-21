@@ -6,30 +6,17 @@
  */
 'use strict';
 
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 
 /**
- * Build a Nodemailer transporter lazily so env vars are resolved
- * at call time rather than module load time.
+ * Build a Resend client lazily so env vars are resolved at call time.
  */
-function createTransporter() {
-  const host = process.env.SMTP_HOST;
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
-
-  if (!host || !user || !pass) {
-    return null; // SMTP not configured
+function getResendClient() {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) {
+    return null; // Resend API key not configured
   }
-
-  return nodemailer.createTransport({
-    host,
-    port: parseInt(process.env.SMTP_PORT || '587', 10),
-    secure: process.env.SMTP_SECURE === 'true',
-    auth: { user, pass },
-    connectionTimeout: 5000, // 5s connection timeout
-    greetingTimeout: 5000,   // 5s greeting timeout
-    socketTimeout: 10000,    // 10s socket timeout
-  });
+  return new Resend(apiKey);
 }
 
 function buildOTPEmailHTML(appName, title, leadText, digits, expiryMins) {
@@ -243,16 +230,16 @@ function buildOTPEmailHTML(appName, title, leadText, digits, expiryMins) {
  */
 async function sendOTPEmail(email, otp, expiryMins = 5) {
   const appName   = 'StudyBuddy AI';
-  const fromAddr  = process.env.SMTP_FROM || `"${appName}" <noreply@studybuddy.ai>`;
+  const fromAddr  = process.env.RESEND_FROM || `StudyBuddy AI <onboarding@resend.dev>`;
 
-  const transporter = createTransporter();
+  const resend = getResendClient();
 
-  if (!transporter) {
-    // SMTP not configured — log OTP to console ONLY in development
+  if (!resend) {
+    // Resend not configured — log OTP to console ONLY in development
     if (process.env.NODE_ENV !== 'production') {
-      console.log(`⚠️  SMTP not configured. [DEV ONLY] OTP for ${email}: ${otp}`);
+      console.log(`⚠️  Resend not configured. [DEV ONLY] OTP for ${email}: ${otp}`);
     } else {
-      console.error(`❌ SMTP not configured — cannot send OTP email to ${email}`);
+      console.error(`❌ Resend not configured — cannot send OTP email to ${email}`);
       throw new Error('Email service is not configured. Contact support.');
     }
     return;
@@ -279,7 +266,7 @@ ${appName} will never ask for your verification code by phone, chat, or email.
 If you did not request this code, you can safely ignore this email.
   `.trim();
 
-  await transporter.sendMail({
+  const { error } = await resend.emails.send({
     from   : fromAddr,
     to     : email,
     subject: `${otp} is your ${appName} verification code`,
@@ -287,22 +274,27 @@ If you did not request this code, you can safely ignore this email.
     html,
   });
 
+  if (error) {
+    console.error('Resend email send error:', error);
+    throw new Error(error.message || 'Failed to send verification email via Resend.');
+  }
+
   // Log delivery confirmation without leaking OTP
   console.log(`📧 OTP email delivered to ${email} (expires in ${expiryMins}m)`);
 }
 
 async function sendPasswordResetEmail(email, otp, expiryMins = 5) {
   const appName   = 'StudyBuddy AI';
-  const fromAddr  = process.env.SMTP_FROM || `"${appName}" <noreply@studybuddy.ai>`;
+  const fromAddr  = process.env.RESEND_FROM || `StudyBuddy AI <onboarding@resend.dev>`;
 
-  const transporter = createTransporter();
+  const resend = getResendClient();
 
-  if (!transporter) {
-    // SMTP not configured — log OTP to console ONLY in development
+  if (!resend) {
+    // Resend not configured — log OTP to console ONLY in development
     if (process.env.NODE_ENV !== 'production') {
-      console.log(`⚠️  SMTP not configured. [DEV ONLY] Password Reset OTP for ${email}: ${otp}`);
+      console.log(`⚠️  Resend not configured. [DEV ONLY] Password Reset OTP for ${email}: ${otp}`);
     } else {
-      console.error(`❌ SMTP not configured — cannot send password reset email to ${email}`);
+      console.error(`❌ Resend not configured — cannot send password reset email to ${email}`);
       throw new Error('Email service is not configured. Contact support.');
     }
     return;
@@ -329,13 +321,18 @@ ${appName} will never ask for your verification code by phone, chat, or email.
 If you did not request this code, you can safely ignore this email.
   `.trim();
 
-  await transporter.sendMail({
+  const { error } = await resend.emails.send({
     from   : fromAddr,
     to     : email,
     subject: `${otp} is your ${appName} password reset code`,
     text,
     html,
   });
+
+  if (error) {
+    console.error('Resend reset email send error:', error);
+    throw new Error(error.message || 'Failed to send password reset email via Resend.');
+  }
 
   // Log delivery confirmation without leaking OTP
   console.log(`📧 Password reset email delivered to ${email} (expires in ${expiryMins}m)`);
