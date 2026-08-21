@@ -111,13 +111,42 @@ router.post('/register', loginLimiter, async (req, res, next) => {
       return res.status(400).json({ success: false, error: 'Password must be at least 8 characters.' });
     }
 
-    // Check for existing account — use generic message to prevent enumeration
+    // Check for existing account
     const existing = await db.findUserByEmail(email);
     if (existing) {
-      // Return the same OTP-required response to prevent account enumeration
-      return res.status(409).json({
-        success: false,
-        error  : 'An account with this email already exists. Please log in instead.',
+      if (existing.is_verified) {
+        return res.status(409).json({
+          success: false,
+          error  : 'An account with this email already exists. Please log in instead.',
+        });
+      }
+
+      // If the account exists but is not verified, allow re-registration by overwriting it
+      const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
+      await db.updateUserRegistration(existing.id, name, passwordHash);
+
+      const otp       = generateSecureOTP();
+      const expiresAt = new Date(Date.now() + OTP_EXPIRY_MIN * 60 * 1000);
+      await db.createLoginOTP(existing.id, otp, expiresAt);
+
+      try {
+        await sendOTPEmail(email, otp, OTP_EXPIRY_MIN);
+      } catch (emailErr) {
+        console.error('Email send failed during register retry:', emailErr.message);
+        if (process.env.NODE_ENV === 'production') {
+          return res.status(503).json({
+            success: false,
+            error  : 'Failed to send verification email. Please try again.',
+          });
+        }
+      }
+
+      return res.status(201).json({
+        success    : true,
+        otpRequired: true,
+        email,
+        message    : `Verification code sent to ${email}. It expires in ${OTP_EXPIRY_MIN} minutes.`,
+        expiresInSeconds: OTP_EXPIRY_MIN * 60,
       });
     }
 

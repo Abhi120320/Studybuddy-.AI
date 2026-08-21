@@ -86,6 +86,16 @@ async function updateUserPassword(userId, passwordHash) {
 }
 
 /**
+ * Update user registration details (used when re-registering an unverified account).
+ */
+async function updateUserRegistration(userId, name, passwordHash) {
+  await query(
+    `UPDATE users SET name = $1, password_hash = $2, updated_at = NOW() WHERE id = $3`,
+    [name, passwordHash, userId]
+  );
+}
+
+/**
  * Legacy: find-or-create user by email (no password).
  * Kept for backward compatibility with existing flows.
  */
@@ -554,6 +564,7 @@ module.exports = {
   createUser,
   markUserVerified,
   updateUserPassword,
+  updateUserRegistration,
   findOrCreateUser,        // legacy
   // Login OTP (hardened)
   createLoginOTP,
