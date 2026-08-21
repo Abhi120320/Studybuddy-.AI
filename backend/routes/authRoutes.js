@@ -29,7 +29,7 @@ const bcrypt     = require('bcryptjs');
 const rateLimit  = require('express-rate-limit');
 
 const db                  = require('../db/queries');
-const { sendOTPEmail }    = require('../services/emailService');
+const { sendOTPEmail, sendPasswordResetEmail }    = require('../services/emailService');
 const {
   generateAccessToken,
   generateRefreshToken,
@@ -416,6 +416,103 @@ router.post('/send-otp', loginLimiter, async (req, res, next) => {
       otpRequired: true,
       message    : 'Verification code sent. Check your email.',
       expiresInSeconds: OTP_EXPIRY_MIN * 60,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ── POST /auth/forgot-password ────────────────────────────────────────────
+// Generate a password reset OTP and email it to the user.
+router.post('/forgot-password', loginLimiter, async (req, res, next) => {
+  try {
+    const email = sanitizeEmail(req.body.email);
+
+    if (!email || !isValidEmail(email)) {
+      return res.status(400).json({ success: false, error: 'A valid email address is required.' });
+    }
+
+    const user = await db.findUserByEmail(email);
+    if (!user) {
+      // Security: return success and generic message to prevent account enumeration
+      return res.json({
+        success: true,
+        message: 'If your email is registered, a password reset code has been sent. Check your email.',
+        expiresInSeconds: OTP_EXPIRY_MIN * 60,
+      });
+    }
+
+    const otp = generateSecureOTP();
+    const expiresAt = new Date(Date.now() + OTP_EXPIRY_MIN * 60 * 1000);
+
+    await db.createPasswordResetOTP(user.id, otp, expiresAt);
+
+    try {
+      await sendPasswordResetEmail(email, otp, OTP_EXPIRY_MIN);
+    } catch (emailErr) {
+      console.error('Password reset email send failed:', emailErr.message);
+      if (process.env.NODE_ENV === 'production') {
+        return res.status(503).json({
+          success: false,
+          error  : 'Failed to send password reset email. Please try again.',
+        });
+      }
+    }
+
+    console.log(`🔑 Password reset requested for: ${email}`);
+
+    return res.json({
+      success: true,
+      message: 'If your email is registered, a password reset code has been sent. Check your email.',
+      expiresInSeconds: OTP_EXPIRY_MIN * 60,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ── POST /auth/reset-password ─────────────────────────────────────────────
+// Verify password reset OTP and update user's password.
+router.post('/reset-password', otpVerifyLimiter, async (req, res, next) => {
+  try {
+    const { otp, password } = req.body;
+    const email = sanitizeEmail(req.body.email);
+
+    if (!email || !isValidEmail(email)) {
+      return res.status(400).json({ success: false, error: 'A valid email address is required.' });
+    }
+    if (!otp || otp.length !== 6) {
+      return res.status(400).json({ success: false, error: 'A 6-digit verification code is required.' });
+    }
+    if (!isValidPassword(password)) {
+      return res.status(400).json({ success: false, error: 'Password must be at least 8 characters.' });
+    }
+
+    const user = await db.findUserByEmail(email);
+    if (!user) {
+      return res.status(400).json({ success: false, error: 'Invalid email or verification code.' });
+    }
+
+    const verifyResult = await db.verifyPasswordResetOTP(user.id, otp);
+    if (!verifyResult.success) {
+      return res.status(400).json({ success: false, error: verifyResult.reason || 'Invalid verification code.' });
+    }
+
+    // Hash the new password
+    const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
+
+    // Update user password and ensure user is marked as verified
+    await db.updateUserPassword(user.id, passwordHash);
+    await db.markUserVerified(user.id);
+
+    // Invalidate any remaining unverified reset OTPs for this user
+    await db.invalidatePreviousResetOTPs(user.id);
+
+    console.log(`🔐 Password successfully reset for: ${email}`);
+
+    return res.json({
+      success: true,
+      message: 'Password reset successfully. Please log in with your new password.',
     });
   } catch (err) {
     next(err);

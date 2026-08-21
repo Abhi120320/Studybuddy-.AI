@@ -20,7 +20,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useRive, useStateMachineInput } from '@rive-app/react-canvas';
 import { IconArrow } from './Icons';
-import { loginUser, registerUser, verifyOTP, resendOTP } from '../utils/api';
+import { loginUser, registerUser, verifyOTP, resendOTP, forgotPassword, resetPassword } from '../utils/api';
 
 // ── Constants ─────────────────────────────────────────────────────────────
 const OTP_LENGTH       = 6;
@@ -81,6 +81,11 @@ const AuthPage = () => {
   const [password, setPassword]     = useState('');
   const [name, setName]             = useState('');
   const [showPassword, setShowPassword] = useState(false);
+
+  // Forgot password flow states
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [resetOtp, setResetOtp] = useState('');
 
   // OTP digits — stored as array of single chars
   const [digits, setDigits]         = useState(Array(OTP_LENGTH).fill(''));
@@ -202,6 +207,100 @@ const AuthPage = () => {
     }
   };
 
+  // ── Forgot Password Handlers ──────────────────────────────────────────
+  const handleForgotEmail = async (e) => {
+    e.preventDefault();
+    setError('');
+    setInfoMsg('');
+
+    if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
+      setError('Please enter a valid email address.');
+      riveFail();
+      return;
+    }
+
+    setLoading(true);
+    riveHandsDown();
+
+    try {
+      const res = await forgotPassword(email.trim().toLowerCase());
+      setStep('forgot_otp');
+      setDigits(Array(OTP_LENGTH).fill(''));
+      setOtpActive(true);
+      setInfoMsg(res.message || 'Verification code sent. Check your inbox.');
+      
+      // Auto-focus first digit
+      setTimeout(() => digitRefs.current[0]?.focus(), 100);
+    } catch (err) {
+      setError(err.message || 'Failed to send reset code. Please try again.');
+      riveFail();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyForgotOTP = (e) => {
+    e.preventDefault();
+    setError('');
+
+    if (!otpComplete) {
+      setError('Please enter the full 6-digit code.');
+      riveFail();
+      return;
+    }
+
+    // Save the OTP and transition to password reset input screen
+    setResetOtp(otpValue);
+    setStep('reset_password');
+    setNewPassword('');
+    setConfirmPassword('');
+    setError('');
+    setInfoMsg('');
+  };
+
+  const handleNewPasswordSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setInfoMsg('');
+
+    if (!newPassword || newPassword.length < 8) {
+      setError('Password must be at least 8 characters.');
+      riveFail();
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setError('Passwords do not match.');
+      riveFail();
+      return;
+    }
+
+    setLoading(true);
+    riveHandsDown();
+
+    try {
+      await resetPassword(email.trim().toLowerCase(), resetOtp, newPassword);
+      setInfoMsg('✅ Password reset successfully! Redirecting to login…');
+      riveSuccess();
+      
+      // Reset states and redirect to login
+      setTimeout(() => {
+        setMode('login');
+        setStep('credentials');
+        setEmail('');
+        setPassword('');
+        setNewPassword('');
+        setConfirmPassword('');
+        setResetOtp('');
+        setInfoMsg('');
+      }, 2000);
+    } catch (err) {
+      setError(err.message || 'Failed to reset password. Please try again.');
+      riveFail();
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // ── OTP Digit Handlers ────────────────────────────────────────────────
   const handleDigitChange = (index, value) => {
     // Accept only single digit
@@ -296,11 +395,19 @@ const AuthPage = () => {
     setLoading(true);
 
     try {
-      await resendOTP(email.trim().toLowerCase());
-      setDigits(Array(OTP_LENGTH).fill(''));
-      setOtpActive(true);
-      setResendActive(true);
-      setInfoMsg('New verification code sent. Check your inbox.');
+      if (mode === 'forgot') {
+        const res = await forgotPassword(email.trim().toLowerCase());
+        setDigits(Array(OTP_LENGTH).fill(''));
+        setOtpActive(true);
+        setResendActive(true);
+        setInfoMsg(res.message || 'New verification code sent. Check your inbox.');
+      } else {
+        await resendOTP(email.trim().toLowerCase());
+        setDigits(Array(OTP_LENGTH).fill(''));
+        setOtpActive(true);
+        setResendActive(true);
+        setInfoMsg('New verification code sent. Check your inbox.');
+      }
       setTimeout(() => digitRefs.current[0]?.focus(), 50);
     } catch (err) {
       setError(err.message || 'Failed to resend code. Please try again.');
@@ -346,17 +453,25 @@ const AuthPage = () => {
 
         {/* Title */}
         <h2 style={{ textAlign: 'center', marginBottom: '0.25rem' }}>
-          {step === 'credentials'
-            ? (mode === 'login' ? 'Welcome back' : 'Create an account')
-            : 'Enter verification code'}
+          {mode === 'forgot'
+            ? (step === 'forgot_email' ? 'Reset Password' : step === 'forgot_otp' ? 'Enter Reset Code' : 'New Password')
+            : (step === 'credentials' ? (mode === 'login' ? 'Welcome back' : 'Create an account') : 'Enter verification code')}
         </h2>
         <p className="page-subtitle" style={{ textAlign: 'center', marginBottom: '1.5rem', fontSize: '0.9rem' }}>
-          {step === 'credentials'
-            ? (mode === 'login'
-                ? 'Enter your credentials. We\'ll send a one-time code to verify it\'s you.'
-                : 'Sign up with your email. We\'ll verify it with a one-time code.')
-            : `Code sent to ${email}. It expires in `}
-          {step === 'otp' && (
+          {mode === 'forgot' ? (
+            step === 'forgot_email'
+              ? "Enter your email address. We'll send you a 6-digit code to reset your password."
+              : step === 'forgot_otp'
+                ? `Code sent to ${email}. It expires in `
+                : "Choose a new secure password."
+          ) : (
+            step === 'credentials'
+              ? (mode === 'login'
+                  ? "Enter your credentials. We'll send a one-time code to verify it's you."
+                  : 'Sign up with your email. We\'ll verify it with a one-time code.')
+              : `Code sent to ${email}. It expires in `
+          )}
+          {(step === 'otp' || step === 'forgot_otp') && (
             <strong style={{
               color: otpCountdown < 60 ? 'var(--color-danger)' : 'var(--accent)',
               fontVariantNumeric: 'tabular-nums',
@@ -367,7 +482,7 @@ const AuthPage = () => {
         </p>
 
         {/* ── STEP 1: Credentials Form ─────────────────────────────── */}
-        {step === 'credentials' && (
+        {step === 'credentials' && mode !== 'forgot' && (
           <form onSubmit={handleCredentials} noValidate>
             {mode === 'register' && (
               <div className="form-group">
@@ -427,6 +542,24 @@ const AuthPage = () => {
               </div>
             </div>
 
+            {mode === 'login' && (
+              <div style={{ textAlign: 'right', marginTop: '-0.75rem', marginBottom: '0.75rem' }}>
+                <button
+                  type="button"
+                  className="link-btn"
+                  style={{ fontSize: '0.85rem' }}
+                  onClick={() => {
+                    setMode('forgot');
+                    setStep('forgot_email');
+                    setError('');
+                    setInfoMsg('');
+                  }}
+                >
+                  Forgot password?
+                </button>
+              </div>
+            )}
+
             {error && <div className="status-message status-error" role="alert">{error}</div>}
 
             <button
@@ -445,8 +578,8 @@ const AuthPage = () => {
         )}
 
         {/* ── STEP 2: OTP Verification ──────────────────────────────── */}
-        {step === 'otp' && (
-          <form onSubmit={handleVerifyOTP} noValidate>
+        {(step === 'otp' || step === 'forgot_otp') && (
+          <form onSubmit={step === 'forgot_otp' ? handleVerifyForgotOTP : handleVerifyOTP} noValidate>
 
             {/* 6 individual digit boxes */}
             <div
@@ -524,7 +657,7 @@ const AuthPage = () => {
                 type="button"
                 id="auth-back-btn"
                 className="btn btn-ghost"
-                onClick={resetToCredentials}
+                onClick={step === 'forgot_otp' ? () => { setStep('forgot_email'); setError(''); setInfoMsg(''); } : resetToCredentials}
                 disabled={loading || isSuccess}
                 style={{ flex: 1 }}
               >
@@ -537,12 +670,12 @@ const AuthPage = () => {
                 disabled={loading || isSuccess || !otpComplete || otpCountdown === 0}
                 style={{ flex: 2 }}
               >
-                {loading ? 'Verifying…' : isSuccess ? '✓ Verified!' : 'Verify OTP'}
+                {loading ? 'Verifying…' : (step === 'forgot_otp' ? 'Continue' : (isSuccess ? '✓ Verified!' : 'Verify OTP'))}
               </button>
             </div>
 
             {/* Resend OTP */}
-            <div style={{ textAlign: 'center', marginTop: '1.1rem' }}>
+            <div style={{ textalign: 'center', marginTop: '1.1rem' }}>
               {resendCountdown > 0 ? (
                 <p style={{ color: 'var(--muted-foreground)', fontSize: '0.85rem' }}>
                   Resend available in{' '}
@@ -565,8 +698,133 @@ const AuthPage = () => {
           </form>
         )}
 
+        {/* ── FORGOT EMAIL STEP ───────────────────────────────────── */}
+        {step === 'forgot_email' && mode === 'forgot' && (
+          <form onSubmit={handleForgotEmail} noValidate>
+            <div className="form-group">
+              <label htmlFor="forgot-email">Email</label>
+              <input
+                type="email"
+                id="forgot-email"
+                placeholder="you@school.edu"
+                value={email}
+                onChange={e => { setEmail(e.target.value); setError(''); }}
+                disabled={loading}
+                autoComplete="email"
+                required
+                onFocus={() => { if (isCheckingInput) isCheckingInput.value = true; }} // eslint-disable-line react-hooks/immutability
+              />
+            </div>
+
+            {error && <div className="status-message status-error" role="alert">{error}</div>}
+            {infoMsg && <div className="status-message status-success" role="status">{infoMsg}</div>}
+
+            <button
+              type="submit"
+              className="btn btn-primary btn-block btn-large"
+              disabled={loading}
+              style={{ marginTop: '0.5rem' }}
+            >
+              {loading ? 'Sending code…' : 'Send Reset Code'}
+              {!loading && <span className="btn-arrow"><IconArrow /></span>}
+            </button>
+
+            <button
+              type="button"
+              className="btn btn-ghost btn-block"
+              style={{ marginTop: '0.5rem' }}
+              onClick={() => {
+                setMode('login');
+                setStep('credentials');
+                setError('');
+                setInfoMsg('');
+              }}
+              disabled={loading}
+            >
+              Cancel
+            </button>
+          </form>
+        )}
+
+        {/* ── RESET PASSWORD STEP ─────────────────────────────────── */}
+        {step === 'reset_password' && mode === 'forgot' && (
+          <form onSubmit={handleNewPasswordSubmit} noValidate>
+            <div className="form-group">
+              <label htmlFor="new-password">New password</label>
+              <div className="password-wrap">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  id="new-password"
+                  placeholder="Min. 8 characters"
+                  value={newPassword}
+                  onChange={e => { setNewPassword(e.target.value); setError(''); }}
+                  disabled={loading}
+                  autoComplete="new-password"
+                  required
+                  onFocus={riveHandsUp}
+                  onBlur={riveHandsDown}
+                />
+                <button
+                  type="button"
+                  className="password-toggle"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  onClick={() => setShowPassword(s => !s)}
+                  tabIndex={-1}
+                >
+                  <EyeIcon open={showPassword} />
+                </button>
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="confirm-password">Confirm new password</label>
+              <div className="password-wrap">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  id="confirm-password"
+                  placeholder="••••••••"
+                  value={confirmPassword}
+                  onChange={e => { setConfirmPassword(e.target.value); setError(''); }}
+                  disabled={loading}
+                  autoComplete="new-password"
+                  required
+                  onFocus={riveHandsUp}
+                  onBlur={riveHandsDown}
+                />
+              </div>
+            </div>
+
+            {error && <div className="status-message status-error" role="alert">{error}</div>}
+            {infoMsg && <div className="status-message status-success" role="status">{infoMsg}</div>}
+
+            <button
+              type="submit"
+              className="btn btn-primary btn-block btn-large"
+              disabled={loading || !newPassword || !confirmPassword}
+              style={{ marginTop: '0.5rem' }}
+            >
+              {loading ? 'Resetting…' : 'Reset Password'}
+              {!loading && <span className="btn-arrow"><IconArrow /></span>}
+            </button>
+
+            <button
+              type="button"
+              className="btn btn-ghost btn-block"
+              style={{ marginTop: '0.5rem' }}
+              onClick={() => {
+                setStep('forgot_otp');
+                setError('');
+                setInfoMsg('');
+              }}
+              disabled={loading}
+            >
+              ← Back
+            </button>
+          </form>
+        )}
+
         {/* Footer links */}
-        {step === 'credentials' && (
+        {step === 'credentials' && mode !== 'forgot' && (
           <>
             <p className="auth-switch">
               {mode === 'login' ? "Don't have an account? " : 'Already have an account? '}

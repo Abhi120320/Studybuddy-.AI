@@ -44,6 +44,42 @@ export const registerUser = async (name, email, password) => {
 };
 
 /**
+ * Request a password reset OTP code.
+ * Calls POST /auth/forgot-password
+ * Returns { success, message, expiresInSeconds }
+ */
+export const forgotPassword = async (email) => {
+  const response = await fetch(`${API_URL}/auth/forgot-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error || 'Failed to request password reset code.');
+  }
+  return data;
+};
+
+/**
+ * Verify password reset OTP and set new password.
+ * Calls POST /auth/reset-password
+ * Returns { success, message }
+ */
+export const resetPassword = async (email, otp, password) => {
+  const response = await fetch(`${API_URL}/auth/reset-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, otp, password }),
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error || 'Failed to reset password.');
+  }
+  return data;
+};
+
+/**
  * Validate email + password. On success, logs the user in directly.
  * Stores JWT in sessionStorage and sets refresh cookie.
  */

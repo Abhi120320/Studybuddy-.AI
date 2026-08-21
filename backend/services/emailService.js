@@ -32,38 +32,8 @@ function createTransporter() {
   });
 }
 
-/**
- * Send a 6-digit OTP verification email.
- *
- * @param {string} email       - Recipient email address
- * @param {string} otp         - Plaintext OTP (only used here, never logged)
- * @param {number} expiryMins  - OTP validity period in minutes (default: 5)
- * @returns {Promise<void>}
- */
-async function sendOTPEmail(email, otp, expiryMins = 5) {
-  const appName   = 'StudyBuddy AI';
-  const fromAddr  = process.env.SMTP_FROM || `"${appName}" <noreply@studybuddy.ai>`;
-
-  const transporter = createTransporter();
-
-  if (!transporter) {
-    // SMTP not configured — log OTP to console ONLY in development
-    if (process.env.NODE_ENV !== 'production') {
-      console.log(`⚠️  SMTP not configured. [DEV ONLY] OTP for ${email}: ${otp}`);
-    } else {
-      console.error(`❌ SMTP not configured — cannot send OTP email to ${email}`);
-      throw new Error('Email service is not configured. Contact support.');
-    }
-    return;
-  }
-
-  const otpStr = String(otp || '');
-  const digits = [];
-  for (let i = 0; i < 6; i++) {
-    digits.push(otpStr[i] || '-');
-  }
-
-  const html = `
+function buildOTPEmailHTML(appName, title, leadText, digits, expiryMins) {
+  return `
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -71,7 +41,7 @@ async function sendOTPEmail(email, otp, expiryMins = 5) {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="color-scheme" content="light dark">
   <meta name="supported-color-schemes" content="light dark">
-  <title>${appName} — Verification Code</title>
+  <title>${title}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@800;900&family=Plus+Jakarta+Sans:wght@500;700;800&display=swap" rel="stylesheet">
@@ -193,8 +163,7 @@ async function sendOTPEmail(email, otp, expiryMins = 5) {
                 Hello,
               </h2>
               <p class="text-slate" style="margin:0 0 32px;color:#1e293b;font-size:15px;line-height:1.6;font-weight:500;">
-                You requested a login verification code for your ${appName} account.
-                Use the code below to complete your sign-in.
+                ${leadText}
               </p>
 
               <!-- OTP Verification Boxes Box -->
@@ -262,6 +231,41 @@ async function sendOTPEmail(email, otp, expiryMins = 5) {
   </table>
 </body>
 </html>`;
+}
+
+/**
+ * Send a 6-digit OTP verification email.
+ *
+ * @param {string} email       - Recipient email address
+ * @param {string} otp         - Plaintext OTP (only used here, never logged)
+ * @param {number} expiryMins  - OTP validity period in minutes (default: 5)
+ * @returns {Promise<void>}
+ */
+async function sendOTPEmail(email, otp, expiryMins = 5) {
+  const appName   = 'StudyBuddy AI';
+  const fromAddr  = process.env.SMTP_FROM || `"${appName}" <noreply@studybuddy.ai>`;
+
+  const transporter = createTransporter();
+
+  if (!transporter) {
+    // SMTP not configured — log OTP to console ONLY in development
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`⚠️  SMTP not configured. [DEV ONLY] OTP for ${email}: ${otp}`);
+    } else {
+      console.error(`❌ SMTP not configured — cannot send OTP email to ${email}`);
+      throw new Error('Email service is not configured. Contact support.');
+    }
+    return;
+  }
+
+  const otpStr = String(otp || '');
+  const digits = [];
+  for (let i = 0; i < 6; i++) {
+    digits.push(otpStr[i] || '-');
+  }
+
+  const leadText = `You requested a login verification code for your ${appName} account. Use the code below to complete your sign-in.`;
+  const html = buildOTPEmailHTML(appName, `${appName} — Verification Code`, leadText, digits, expiryMins);
 
   const text = `
 ${appName} — Verification Code
@@ -287,4 +291,54 @@ If you did not request this code, you can safely ignore this email.
   console.log(`📧 OTP email delivered to ${email} (expires in ${expiryMins}m)`);
 }
 
-module.exports = { sendOTPEmail };
+async function sendPasswordResetEmail(email, otp, expiryMins = 5) {
+  const appName   = 'StudyBuddy AI';
+  const fromAddr  = process.env.SMTP_FROM || `"${appName}" <noreply@studybuddy.ai>`;
+
+  const transporter = createTransporter();
+
+  if (!transporter) {
+    // SMTP not configured — log OTP to console ONLY in development
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`⚠️  SMTP not configured. [DEV ONLY] Password Reset OTP for ${email}: ${otp}`);
+    } else {
+      console.error(`❌ SMTP not configured — cannot send password reset email to ${email}`);
+      throw new Error('Email service is not configured. Contact support.');
+    }
+    return;
+  }
+
+  const otpStr = String(otp || '');
+  const digits = [];
+  for (let i = 0; i < 6; i++) {
+    digits.push(otpStr[i] || '-');
+  }
+
+  const leadText = `You requested a password reset code for your ${appName} account. Use the code below to complete your password reset.`;
+  const html = buildOTPEmailHTML(appName, `${appName} — Reset Password`, leadText, digits, expiryMins);
+
+  const text = `
+${appName} — Reset Password
+
+Your password reset verification code is: ${otp}
+
+This code expires in ${expiryMins} minutes.
+
+SECURITY NOTICE: Never share this code with anyone.
+${appName} will never ask for your verification code by phone, chat, or email.
+If you did not request this code, you can safely ignore this email.
+  `.trim();
+
+  await transporter.sendMail({
+    from   : fromAddr,
+    to     : email,
+    subject: `${otp} is your ${appName} password reset code`,
+    text,
+    html,
+  });
+
+  // Log delivery confirmation without leaking OTP
+  console.log(`📧 Password reset email delivered to ${email} (expires in ${expiryMins}m)`);
+}
+
+module.exports = { sendOTPEmail, sendPasswordResetEmail };

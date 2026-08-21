@@ -219,6 +219,81 @@ async function verifyLoginOTP(userId, otpPlain) {
   return { success: true, otpId: otp.id };
 }
 
+// ── Password Reset OTP Queries (hardened) ──────────────────────────────────
+
+/**
+ * Invalidate (delete) any previous unverified password reset OTPs for this user.
+ */
+async function invalidatePreviousResetOTPs(userId) {
+  await query(
+    'DELETE FROM password_reset_otps WHERE user_id = $1 AND verified = FALSE',
+    [userId]
+  );
+}
+
+/**
+ * Create a new password reset OTP for a user.
+ */
+async function createPasswordResetOTP(userId, otpPlain, expiresAt) {
+  await invalidatePreviousResetOTPs(userId);
+  const otpHash = await bcrypt.hash(otpPlain, BCRYPT_ROUNDS);
+  const res = await query(
+    `INSERT INTO password_reset_otps (user_id, otp_hash, expires_at, attempts, verified)
+     VALUES ($1, $2, $3, 0, FALSE)
+     RETURNING id`,
+    [userId, otpHash, expiresAt]
+  );
+  return res.rows[0].id;
+}
+
+/**
+ * Verify a plaintext password reset OTP against stored hash for a user.
+ */
+async function verifyPasswordResetOTP(userId, otpPlain) {
+  const res = await query(
+    `SELECT id, otp_hash, expires_at, attempts, verified
+     FROM password_reset_otps
+     WHERE user_id = $1 AND verified = FALSE
+     ORDER BY created_at DESC
+     LIMIT 1`,
+    [userId]
+  );
+  if (!res.rows.length) {
+    return { success: false, reason: 'No pending reset code found. Please request a new code.' };
+  }
+  const otp = res.rows[0];
+  if (otp.attempts >= OTP_MAX_ATTEMPTS) {
+    await query('DELETE FROM password_reset_otps WHERE id = $1', [otp.id]);
+    return { success: false, reason: 'Maximum verification attempts exceeded. Please request a new code.' };
+  }
+  if (new Date(otp.expires_at) < new Date()) {
+    await query('DELETE FROM password_reset_otps WHERE id = $1', [otp.id]);
+    return { success: false, reason: 'Verification code has expired. Please request a new code.' };
+  }
+  await query(
+    'UPDATE password_reset_otps SET attempts = attempts + 1 WHERE id = $1',
+    [otp.id]
+  );
+  const match = await bcrypt.compare(otpPlain, otp.otp_hash);
+  if (!match) {
+    const remainingAttempts = OTP_MAX_ATTEMPTS - (otp.attempts + 1);
+    if (remainingAttempts <= 0) {
+      await query('DELETE FROM password_reset_otps WHERE id = $1', [otp.id]);
+      return { success: false, reason: 'Maximum verification attempts exceeded. Please request a new code.' };
+    }
+    return {
+      success: false,
+      reason : `Invalid verification code. ${remainingAttempts} attempt${remainingAttempts === 1 ? '' : 's'} remaining.`,
+    };
+  }
+  await query(
+    'UPDATE password_reset_otps SET verified = TRUE WHERE id = $1',
+    [otp.id]
+  );
+  return { success: true, otpId: otp.id };
+}
+
+
 // ═══════════════════════════════════════════════════════════════════════════
 // ── Login Sessions (History) ──────────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════════
@@ -484,6 +559,10 @@ module.exports = {
   createLoginOTP,
   verifyLoginOTP,
   invalidatePreviousOTPs,
+  // Password Reset OTP (hardened)
+  createPasswordResetOTP,
+  verifyPasswordResetOTP,
+  invalidatePreviousResetOTPs,
   // Login Sessions
   createLoginSession,
   updateSessionLogout,
