@@ -33,7 +33,21 @@ app.set('trust proxy', 1); // required when behind Nginx lb
 
 // ── CORS ──────────────────────────────────────────────────────────────────
 app.use(cors({
-  origin: config.corsOrigin,
+  origin: (origin, callback) => {
+    if (!origin) {
+      return callback(null, true);
+    }
+    const isAllowed = origin === config.corsOrigin ||
+      origin.endsWith('.vercel.app') ||
+      /^https?:\/\/localhost(:\d+)?$/.test(origin) ||
+      /^https?:\/\/127\.0\.0\.1(:\d+)?$/.test(origin);
+
+    if (isAllowed) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
 }));
 
