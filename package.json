@@ -1,0 +1,8 @@
+{
+  "name": "studybuddy-root",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "cd frontend/react-app && npm install && npm run build && mkdir -p ../../dist && cp -r dist/* ../../dist/"
+  }
+}
