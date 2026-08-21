@@ -21,24 +21,34 @@ const PAGE_META = {
 
 function App() {
   const [currentPage, setCurrentPage] = useState('landing');
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen]   = useState(false);
   const [pomodoroOpen, setPomodoroOpen] = useState(false);
+  const [user, setUser] = useState({ name: 'Student', initial: 'S', plan: 'Free' });
 
-  const storedEmail = typeof window !== 'undefined' ? sessionStorage.getItem('userEmail') || '' : '';
-  const userName = storedEmail ? storedEmail.split('@')[0] : 'Student';
-  const user = { name: userName, initial: userName.charAt(0).toUpperCase(), plan: 'Free' };
+  /** Re-read user info from sessionStorage whenever navigation happens */
+  function refreshUser() {
+    const storedName  = sessionStorage.getItem('userName')  || '';
+    const storedEmail = sessionStorage.getItem('userEmail') || '';
+    const displayName = storedName || (storedEmail ? storedEmail.split('@')[0] : 'Student');
+    setUser({
+      name   : displayName,
+      initial: displayName.charAt(0).toUpperCase(),
+      plan   : 'Free',
+    });
+  }
 
   useEffect(() => {
     const handleHashChange = () => {
-      const hash = window.location.hash.replace('#', '') || 'landing';
+      const hash  = window.location.hash.replace('#', '') || 'landing';
       const token = sessionStorage.getItem('studybuddy_token');
-      
+
       // If no token, restrict access to auth / landing pages only
       if (!token && hash !== 'landing' && hash !== 'auth') {
         window.location.hash = 'auth';
         return;
       }
-      
+
+      refreshUser();          // ← pick up name/email stored after OTP verify
       setCurrentPage(hash);
       setSidebarOpen(false);
     };
@@ -47,6 +57,7 @@ function App() {
     handleHashChange();
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
+
 
   if (currentPage === 'landing') {
     return <LandingPage />;

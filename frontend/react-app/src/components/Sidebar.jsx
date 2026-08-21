@@ -1,5 +1,7 @@
 import React from 'react';
 import { IconLayout, IconNotes, IconTarget, IconCalendar, IconLogout, IconSpark } from './Icons';
+import { logoutUser } from '../utils/api';
+
 
 const nav = [
   { href: '#dashboard', id: 'dashboard', label: 'Home', Icon: IconLayout },
@@ -10,9 +12,10 @@ const nav = [
 ];
 
 const Sidebar = ({ user, currentPage, open, onClose }) => {
-  const handleLogout = () => {
-    sessionStorage.removeItem('userEmail');
-    sessionStorage.removeItem('studybuddy_token');
+  const handleLogout = async (e) => {
+    e.preventDefault();
+    await logoutUser(); // clears sessionStorage + refresh cookie
+    window.location.hash = 'landing';
   };
 
   return (
@@ -44,10 +47,10 @@ const Sidebar = ({ user, currentPage, open, onClose }) => {
         ))}
       </nav>
 
-      <a href="#landing" className="logout-btn" onClick={handleLogout}>
+      <button type="button" className="logout-btn" onClick={handleLogout}>
         <IconLogout size={18} />
         Sign out
-      </a>
+      </button>
     </aside>
   );
 };

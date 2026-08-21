@@ -3,6 +3,7 @@ const cors         = require('cors');
 const compression  = require('compression');
 const helmet       = require('helmet');
 const rateLimit    = require('express-rate-limit');
+const cookieParser = require('cookie-parser');
 const multer       = require('multer');
 const path         = require('path');
 const fs           = require('fs');
@@ -38,6 +39,7 @@ app.use(cors({
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+app.use(cookieParser()); // required for reading HTTP-only refresh token cookies
 
 // ── Rate Limiting ─────────────────────────────────────────────────────────
 // Global: 300 requests per 15 minutes per IP

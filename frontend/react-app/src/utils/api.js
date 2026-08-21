@@ -26,36 +26,118 @@ const authFetch = async (endpoint, options = {}) => {
 
 // ── Auth APIs ─────────────────────────────────────────────────────────────
 
-export const sendOTP = async (email) => {
-  const response = await fetch(`${API_URL}/auth/send-otp`, {
+/**
+ * Register a new account. Triggers an OTP email.
+ * Returns { success, otpRequired, email, message, expiresInSeconds }
+ */
+export const registerUser = async (name, email, password) => {
+  const response = await fetch(`${API_URL}/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, email, password }),
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error || 'Registration failed');
+  }
+  return data;
+};
+
+/**
+ * Validate email + password. On success, logs the user in directly.
+ * Stores JWT in sessionStorage and sets refresh cookie.
+ */
+export const loginUser = async (email, password) => {
+  const response = await fetch(`${API_URL}/auth/login`, {
+    method: 'POST',
+    credentials: 'include',   // needed for Set-Cookie (refresh token)
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error || 'Login failed');
+  }
+  // Store authentication details securely
+  if (data.token) {
+    sessionStorage.setItem('studybuddy_token', data.token);
+    sessionStorage.setItem('userEmail', data.email || email);
+    if (data.name) sessionStorage.setItem('userName', data.name);
+  }
+  return data;
+};
+
+/**
+ * Verify the 6-digit OTP and complete authentication.
+ * On success, stores JWT in sessionStorage and sets refresh cookie.
+ */
+export const verifyOTP = async (email, otp) => {
+  const response = await fetch(`${API_URL}/auth/verify-otp`, {
+    method: 'POST',
+    credentials: 'include',   // needed for Set-Cookie (refresh token)
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, otp }),
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error || 'Verification failed');
+  }
+  // Store authentication details securely
+  if (data.token) {
+    sessionStorage.setItem('studybuddy_token', data.token);
+    sessionStorage.setItem('userEmail', data.email || email);
+    if (data.name) sessionStorage.setItem('userName', data.name);
+  }
+  return data;
+};
+
+/**
+ * Request a new OTP (invalidates the previous one).
+ */
+export const resendOTP = async (email) => {
+  const response = await fetch(`${API_URL}/auth/resend-otp`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email }),
   });
   const data = await response.json();
   if (!response.ok) {
-    throw new Error(data.error || 'Failed to send OTP code');
+    throw new Error(data.error || 'Failed to resend code');
   }
   return data;
 };
 
-export const verifyOTP = async (email, code) => {
-  const response = await fetch(`${API_URL}/auth/verify-otp`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, code }),
-  });
+/**
+ * Log out the current user — clears local storage and refresh cookie.
+ */
+export const logoutUser = async () => {
+  try {
+    await fetch(`${API_URL}/auth/logout`, {
+      method: 'POST',
+      credentials: 'include',
+    });
+  } catch {
+    // Fire-and-forget — always clear local state regardless of server response
+  }
+  sessionStorage.removeItem('studybuddy_token');
+  sessionStorage.removeItem('userEmail');
+  sessionStorage.removeItem('userName');
+};
+
+/**
+ * Fetch the authenticated user's safe profile.
+ */
+export const fetchMe = async () => {
+  const response = await authFetch('/auth/me');
   const data = await response.json();
   if (!response.ok) {
-    throw new Error(data.error || 'Verification failed');
-  }
-  // Store authentication details
-  if (data.token) {
-    sessionStorage.setItem('studybuddy_token', data.token);
-    sessionStorage.setItem('userEmail', data.email);
+    throw new Error(data.error || 'Failed to fetch profile');
   }
   return data;
 };
+
+// Legacy alias — kept so any code that still calls sendOTP doesn't break
+export const sendOTP = loginUser;
 
 // ── Study Materials & Uploads ─────────────────────────────────────────────
 

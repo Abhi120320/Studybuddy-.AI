@@ -1,14 +1,39 @@
 -- Study Buddy AI – PostgreSQL Schema
 -- Run once on first boot (handled by init script in Docker)
+-- All CREATE TABLE/INDEX statements use IF NOT EXISTS — safe to re-run.
 
 -- ── Users ───────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS users (
-  id         SERIAL PRIMARY KEY,
-  email      VARCHAR(255) UNIQUE NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  id            SERIAL PRIMARY KEY,
+  email         VARCHAR(255) UNIQUE NOT NULL,
+  name          VARCHAR(255),
+  password_hash VARCHAR(255),
+  is_verified   BOOLEAN     NOT NULL DEFAULT FALSE,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- ── One-Time Passwords (OTPs) ───────────────────────────────
+-- Add missing columns to existing users table (idempotent migrations)
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                 WHERE table_name='users' AND column_name='name') THEN
+    ALTER TABLE users ADD COLUMN name VARCHAR(255);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                 WHERE table_name='users' AND column_name='password_hash') THEN
+    ALTER TABLE users ADD COLUMN password_hash VARCHAR(255);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                 WHERE table_name='users' AND column_name='is_verified') THEN
+    ALTER TABLE users ADD COLUMN is_verified BOOLEAN NOT NULL DEFAULT FALSE;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                 WHERE table_name='users' AND column_name='updated_at') THEN
+    ALTER TABLE users ADD COLUMN updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+  END IF;
+END $$;
+
+-- ── Legacy OTP table (kept for backward-compat — do NOT drop) ──
 CREATE TABLE IF NOT EXISTS otps (
   id         SERIAL PRIMARY KEY,
   email      VARCHAR(255) NOT NULL,
@@ -18,6 +43,34 @@ CREATE TABLE IF NOT EXISTS otps (
 );
 
 CREATE INDEX IF NOT EXISTS idx_otps_email ON otps(email);
+
+-- ── Login OTPs (hardened — hashed, attempt-tracked) ─────────
+CREATE TABLE IF NOT EXISTS login_otps (
+  id         SERIAL PRIMARY KEY,
+  user_id    INTEGER     NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  otp_hash   VARCHAR(255) NOT NULL,          -- bcrypt hash of the OTP
+  expires_at TIMESTAMPTZ  NOT NULL,
+  attempts   INTEGER      NOT NULL DEFAULT 0, -- failed verification attempts
+  verified   BOOLEAN      NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_login_otps_user    ON login_otps(user_id);
+CREATE INDEX IF NOT EXISTS idx_login_otps_expires ON login_otps(expires_at);
+
+-- ── Login Sessions / History ─────────────────────────────────
+CREATE TABLE IF NOT EXISTS login_sessions (
+  id         SERIAL PRIMARY KEY,
+  user_id    INTEGER     NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  login_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  logout_at  TIMESTAMPTZ,
+  ip_address VARCHAR(45),   -- supports IPv6
+  user_agent TEXT,
+  status     VARCHAR(20)  NOT NULL DEFAULT 'active'  -- active | expired | logged_out
+);
+
+CREATE INDEX IF NOT EXISTS idx_sessions_user   ON login_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_status ON login_sessions(status);
 
 -- ── Subjects / Folders ──────────────────────────────────────
 CREATE TABLE IF NOT EXISTS subjects (
