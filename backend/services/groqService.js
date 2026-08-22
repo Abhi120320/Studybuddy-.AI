@@ -1,12 +1,17 @@
 const axios = require('axios');
 const config = require('../config/config');
 
+const FALLBACK_CHAINS = {
+  'qwen/qwen3.6-27b':    ['qwen/qwen3.6-27b', 'groq/compound-mini', 'groq/compound'],
+  'groq/compound-mini': ['groq/compound-mini', 'groq/compound', 'qwen/qwen3.6-27b'],
+  'groq/compound':      ['groq/compound', 'groq/compound-mini', 'qwen/qwen3.6-27b']
+};
+
 class GroqService {
   constructor() {
     this.apiKey = config.groqApiKey;
     this.apiUrl = config.groqApiUrl;
-    this.model = config.groqModel;
-    this.visionModel = config.groqVisionModel;
+    this.model = config.groqModel || 'groq/compound';
 
     if (!this.apiKey) {
       console.error('⚠️  GROQ_API_KEY is not set in environment variables');
@@ -15,112 +20,98 @@ class GroqService {
 
   /**
    * Helper to make raw Chat Completion calls to Groq.
+   * Leverages a fallback chain if the active model encounters a 429 (rate limit) or 404/400 (not supported).
    */
-  async callApi(messages, temperature = 0.7, requireJson = false, useVision = false) {
-    const maxRetries = 3;
-    let attempt = 0;
+  async callApi(messages, temperature = 0.7, requireJson = false, modelOverride = null) {
+    const baseModel = modelOverride || this.model;
+    const chain = FALLBACK_CHAINS[baseModel] || [baseModel];
+    
+    let lastError = null;
 
-    const activeModel = useVision ? this.visionModel : this.model;
+    for (const activeModel of chain) {
+      const maxRetries = 2;
+      let attempt = 0;
 
-    while (attempt <= maxRetries) {
-      try {
-        const payload = {
-          model: activeModel,
-          messages: messages,
-          temperature: temperature,
-          max_tokens: 4096,
-          ...(requireJson && { response_format: { type: 'json_object' } })
-        };
+      while (attempt <= maxRetries) {
+        try {
+          const payload = {
+            model: activeModel,
+            messages: messages,
+            temperature: temperature,
+            max_tokens: 4096,
+            ...(requireJson && { response_format: { type: 'json_object' } })
+          };
 
-        const response = await axios.post(
-          this.apiUrl,
-          payload,
-          {
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${this.apiKey}`
-            },
-            timeout: 60000 // 60 seconds
+          const response = await axios.post(
+            this.apiUrl,
+            payload,
+            {
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${this.apiKey}`
+              },
+              timeout: 60000 // 60 seconds
+            }
+          );
+
+          console.log(`[GroqRouter] Successfully processed request using model: ${activeModel}`);
+          return response.data.choices[0].message.content;
+        } catch (error) {
+          lastError = error;
+          const status = error.response ? error.response.status : null;
+
+          // If rate limited (429) or model not supported (404/400), try next fallback model immediately
+          if (status === 429 || status === 404 || status === 400) {
+            console.warn(`[GroqRouter] Model ${activeModel} returned status ${status}. Moving to fallback...`);
+            break; 
           }
-        );
 
-        return response.data.choices[0].message.content;
-      } catch (error) {
-        const shouldRetry = error.response && (error.response.status === 503 || error.response.status === 429 || error.response.status === 502);
+          // Retry on temporary server errors (503/502)
+          const shouldRetry = status === 503 || status === 502;
+          if (shouldRetry && attempt < maxRetries) {
+            attempt++;
+            const delay = Math.pow(2, attempt) * 1000;
+            console.log(`[GroqRouter] Temporary error ${status}. Retrying in ${delay}ms on ${activeModel}...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            continue;
+          }
 
-        if (shouldRetry && attempt < maxRetries) {
-          attempt++;
-          const delay = Math.pow(2, attempt) * 1000;
-          console.log(`Groq API overloaded/error (Status ${error.response.status}). Retrying in ${delay}ms (Attempt ${attempt}/${maxRetries})...`);
-          await new Promise(resolve => setTimeout(resolve, delay));
-          continue;
+          break; // move to next model in fallback chain
         }
-
-        console.error('Groq API Error Details:');
-        console.error('Message:', error.message);
-        if (error.response) {
-          console.error('Status:', error.response.status);
-          console.error('Data:', JSON.stringify(error.response.data, null, 2));
-        }
-
-        if (error.response?.status === 401 || error.response?.status === 403) {
-          throw new Error('Invalid GROQ API key');
-        } else if (error.response?.status === 429) {
-          throw new Error('Rate limit exceeded. Please try again later');
-        } else if (error.code === 'ECONNABORTED') {
-          throw new Error('Request timeout. Please try again');
-        } else if (error.response?.status === 503) {
-          throw new Error('Service currently unavailable (Overloaded). Please try again later.');
-        }
-
-        throw new Error('AI service error: ' + (error.response?.data?.error?.message || error.message));
       }
     }
+
+    // Handle and propagate the final error if the whole chain fails
+    console.error('[GroqRouter] All routed models failed.');
+    if (lastError.response) {
+      if (lastError.response.status === 401 || lastError.response.status === 403) {
+        throw new Error('Invalid GROQ API key');
+      } else if (lastError.response.status === 429) {
+        throw new Error('Rate limit exceeded. Please try again later.');
+      }
+    }
+    throw new Error('AI service error: ' + (lastError.response?.data?.error?.message || lastError.message));
   }
 
   /**
-   * General generation function matching the signature of the previous Gemini implementation
+   * General generation helper.
    */
-  async generateContent(prompt, temperature = 0.7, requireJson = false, imageParts = null) {
-    let messages = [];
-    const useVision = imageParts && imageParts.length > 0;
-
-    if (useVision) {
-      const imageBase64 = imageParts[0].inlineData.data;
-      const mimeType = imageParts[0].inlineData.mimeType;
-
-      messages = [
-        {
-          role: 'user',
-          content: [
-            { type: 'text', text: prompt },
-            {
-              type: 'image_url',
-              image_url: {
-                url: `data:${mimeType};base64,${imageBase64}`
-              }
-            }
-          ]
-        }
-      ];
-    } else {
-      messages = [
-        {
-          role: 'user',
-          content: prompt
-        }
-      ];
-    }
-
-    return await this.callApi(messages, temperature, requireJson, useVision);
+  async generateContent(prompt, temperature = 0.7, requireJson = false, modelOverride = null) {
+    const messages = [
+      {
+        role: 'user',
+        content: prompt
+      }
+    ];
+    return await this.callApi(messages, temperature, requireJson, modelOverride);
   }
 
-  async chat(messages, temperature = 0.7) {
+  async chat(messages, temperature = 0.7, modelOverride = 'groq/compound') {
     const formattedMessages = messages.map(m => ({
       role: m.role === 'system' ? 'system' : (m.role === 'assistant' ? 'assistant' : 'user'),
       content: m.content
     }));
-    return await this.callApi(formattedMessages, temperature, false, false);
+    return await this.callApi(formattedMessages, temperature, false, modelOverride);
   }
 
   async generateQuestions(notes, difficulty, count) {
@@ -143,7 +134,7 @@ Format your response as JSON array like this:
 
 Generate ONLY the JSON, no other text.`;
 
-    const response = await this.generateContent(prompt, 0.5, true);
+    const response = await this.generateContent(prompt, 0.5, true, 'qwen/qwen3.6-27b');
     try {
       return JSON.parse(response);
     } catch (e) {
@@ -172,7 +163,7 @@ Format as:
 **Real-world Examples:**
 - example 1`;
 
-    return await this.generateContent(prompt, 0.7);
+    return await this.generateContent(prompt, 0.7, false, 'groq/compound-mini');
   }
 
   async generateSchedule(notes, daysUntilExam) {
@@ -198,7 +189,7 @@ Format as JSON:
 
 Generate ONLY JSON.`;
 
-    const response = await this.generateContent(prompt, 0.5, true);
+    const response = await this.generateContent(prompt, 0.5, true, 'groq/compound-mini');
     try {
       return JSON.parse(response);
     } catch (e) {
@@ -229,7 +220,7 @@ Format JSON only:
   ]
 }`;
 
-    const response = await this.generateContent(prompt, 0.5, true);
+    const response = await this.generateContent(prompt, 0.5, true, 'qwen/qwen3.6-27b');
     try {
       return JSON.parse(response);
     } catch (e) {
@@ -259,7 +250,7 @@ Format JSON only:
   "feedback": "Overall feedback and how to improve."
 }`;
 
-    const response = await this.generateContent(prompt, 0.3, true);
+    const response = await this.generateContent(prompt, 0.3, true, 'groq/compound');
     try {
       return JSON.parse(response);
     } catch (e) {
@@ -282,7 +273,7 @@ ${notes}`
       { role: 'user', content: question }
     ];
 
-    return await this.chat(messages, 0.7);
+    return await this.chat(messages, 0.7, 'groq/compound');
   }
 
   async generateVivaQuestions(notes, numQuestions) {
@@ -299,7 +290,7 @@ Format JSON only:
   ]
 }`;
 
-    const response = await this.generateContent(prompt, 0.7, true);
+    const response = await this.generateContent(prompt, 0.7, true, 'groq/compound-mini');
     try {
       return JSON.parse(response);
     } catch (e) {
@@ -330,7 +321,7 @@ Format JSON only:
   "isCorrect": true
 }`;
 
-    const response = await this.generateContent(prompt, 0.4, true);
+    const response = await this.generateContent(prompt, 0.4, true, 'groq/compound');
     try {
       return JSON.parse(response);
     } catch (e) {
