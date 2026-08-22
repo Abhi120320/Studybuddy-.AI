@@ -8,37 +8,48 @@
 
 const nodemailer = require('nodemailer');
 
-/**
- * Build a Nodemailer transporter lazily so env vars are resolved at call time.
- * Supports Gmail, Outlook, or any custom SMTP provider.
- */
+// Module-level singleton — created once, reused for all emails.
+// pool:true reuses SMTP connections instead of reconnecting per email,
+// which prevents Gmail from throttling after the first send.
+let _transporter = null;
+
 function getTransporter() {
+  // Return cached transporter if already created
+  if (_transporter) return _transporter;
+
   const host = process.env.SMTP_HOST;
   const port = parseInt(process.env.SMTP_PORT || '587', 10);
   const user = process.env.SMTP_USER;
   const pass = process.env.SMTP_PASS;
 
-  // If no SMTP config — return null (handled in callers)
   if (!user || !pass) return null;
 
-  // Gmail shortcut: if no host provided, use Gmail defaults
   if (!host) {
-    return nodemailer.createTransport({
+    // Gmail with connection pool
+    _transporter = nodemailer.createTransport({
       service          : 'gmail',
+      pool             : true,   // reuse connections — prevents Gmail throttling
+      maxConnections   : 3,
+      maxMessages      : 100,
       auth             : { user, pass },
-      connectionTimeout: 5000, // fail fast instead of hanging
-      socketTimeout    : 10000,
+      connectionTimeout: 8000,
+      socketTimeout    : 15000,
+    });
+  } else {
+    _transporter = nodemailer.createTransport({
+      host,
+      port,
+      pool             : true,
+      maxConnections   : 3,
+      maxMessages      : 100,
+      secure           : port === 465,
+      auth             : { user, pass },
+      connectionTimeout: 8000,
+      socketTimeout    : 15000,
     });
   }
 
-  return nodemailer.createTransport({
-    host,
-    port,
-    secure           : port === 465,
-    auth             : { user, pass },
-    connectionTimeout: 5000,
-    socketTimeout    : 10000,
-  });
+  return _transporter;
 }
 
 function buildOTPEmailHTML(appName, title, leadText, digits, expiryMins) {
