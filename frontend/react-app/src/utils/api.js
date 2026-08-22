@@ -1,8 +1,24 @@
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+import { 
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword, 
+  sendEmailVerification, 
+  sendPasswordResetEmail,
+  signOut,
+  updateProfile
+} from 'firebase/auth';
+import { auth } from '../firebase';
 
-// Helper: Perform authenticated fetches injecting JWT token
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
+
+// Helper: Perform authenticated fetches injecting Firebase ID token
 const authFetch = async (endpoint, options = {}) => {
-  const token = sessionStorage.getItem('studybuddy_token');
+  let token = null;
+  if (auth.currentUser) {
+    token = await auth.currentUser.getIdToken();
+  } else {
+    token = sessionStorage.getItem('studybuddy_token');
+  }
+
   const headers = {
     ...options.headers,
     ...(token && { 'Authorization': `Bearer ${token}` })
@@ -15,8 +31,10 @@ const authFetch = async (endpoint, options = {}) => {
 
   if (response.status === 401 || response.status === 403) {
     // Session expired or invalid
+    await signOut(auth);
     sessionStorage.removeItem('studybuddy_token');
     sessionStorage.removeItem('userEmail');
+    sessionStorage.removeItem('userName');
     window.location.hash = 'auth';
     throw new Error('Session expired. Please log in again.');
   }
@@ -27,137 +45,106 @@ const authFetch = async (endpoint, options = {}) => {
 // ── Auth APIs ─────────────────────────────────────────────────────────────
 
 /**
- * Register a new account. Triggers an OTP email.
- * Returns { success, otpRequired, email, message, expiresInSeconds }
+ * Synchronize the authenticated Firebase user with the PostgreSQL database.
+ */
+export const syncUser = async (idToken) => {
+  const response = await fetch(`${API_URL}/auth/sync`, {
+    method: 'POST',
+    headers: { 
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${idToken}`
+    }
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error || 'Failed to sync account with backend.');
+  }
+  return data;
+};
+
+/**
+ * Register a new user in Firebase, send email verification, and trigger backend sync.
  */
 export const registerUser = async (name, email, password) => {
-  const response = await fetch(`${API_URL}/auth/register`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, email, password }),
-  });
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(data.error || 'Registration failed');
-  }
-  return data;
+  const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+  const user = userCredential.user;
+
+  // Add display name in Firebase
+  await updateProfile(user, { displayName: name });
+
+  // Send verification link
+  await sendEmailVerification(user);
+
+  // Initial sync with backend (creates PG entry and General subject)
+  const idToken = await user.getIdToken();
+  await syncUser(idToken);
+
+  return {
+    success: true,
+    email: user.email,
+    message: 'Verification link sent. Please verify your email to log in.'
+  };
 };
 
 /**
- * Request a password reset OTP code.
- * Calls POST /auth/forgot-password
- * Returns { success, message, expiresInSeconds }
+ * Request password reset link.
  */
 export const forgotPassword = async (email) => {
-  const response = await fetch(`${API_URL}/auth/forgot-password`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email }),
-  });
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(data.error || 'Failed to request password reset code.');
-  }
-  return data;
+  await sendPasswordResetEmail(auth, email);
+  return { success: true, message: 'Password reset link sent to your email.' };
 };
 
 /**
- * Verify password reset OTP and set new password.
- * Calls POST /auth/reset-password
- * Returns { success, message }
- */
-export const resetPassword = async (email, otp, password) => {
-  const response = await fetch(`${API_URL}/auth/reset-password`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, otp, password }),
-  });
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(data.error || 'Failed to reset password.');
-  }
-  return data;
-};
-
-/**
- * Validate email + password. On success, logs the user in directly.
- * Stores JWT in sessionStorage and sets refresh cookie.
+ * Log in via Firebase Auth. Forces email verification.
  */
 export const loginUser = async (email, password) => {
-  const response = await fetch(`${API_URL}/auth/login`, {
-    method: 'POST',
-    credentials: 'include',   // needed for Set-Cookie (refresh token)
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
-  });
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(data.error || 'Login failed');
+  const userCredential = await signInWithEmailAndPassword(auth, email, password);
+  const user = userCredential.user;
+
+  if (!user.emailVerified) {
+    await sendEmailVerification(user);
+    await signOut(auth);
+    throw new Error('Please verify your email. A new verification link has been sent to your inbox.');
   }
-  // Store authentication details securely
-  if (data.token) {
-    sessionStorage.setItem('studybuddy_token', data.token);
-    sessionStorage.setItem('userEmail', data.email || email);
-    if (data.name) sessionStorage.setItem('userName', data.name);
+
+  const idToken = await user.getIdToken();
+  const syncData = await syncUser(idToken);
+
+  // Store in sessionStorage for fast synchronous page load checks
+  sessionStorage.setItem('studybuddy_token', idToken);
+  sessionStorage.setItem('userEmail', user.email);
+  if (syncData.name) {
+    sessionStorage.setItem('userName', syncData.name);
   }
-  return data;
+
+  return syncData;
 };
 
 /**
- * Verify the 6-digit OTP and complete authentication.
- * On success, stores JWT in sessionStorage and sets refresh cookie.
+ * Dummy mocks kept for backward compatibility if any components import them.
  */
-export const verifyOTP = async (email, otp) => {
-  const response = await fetch(`${API_URL}/auth/verify-otp`, {
-    method: 'POST',
-    credentials: 'include',   // needed for Set-Cookie (refresh token)
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, otp }),
-  });
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(data.error || 'Verification failed');
-  }
-  // Store authentication details securely
-  if (data.token) {
-    sessionStorage.setItem('studybuddy_token', data.token);
-    sessionStorage.setItem('userEmail', data.email || email);
-    if (data.name) sessionStorage.setItem('userName', data.name);
-  }
-  return data;
-};
+export const verifyOTP = async () => ({ success: true });
+export const resendOTP = async () => ({ success: true });
+export const resetPassword = async () => ({ success: true });
 
 /**
- * Request a new OTP (invalidates the previous one).
- */
-export const resendOTP = async (email) => {
-  const response = await fetch(`${API_URL}/auth/resend-otp`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email }),
-  });
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(data.error || 'Failed to resend code');
-  }
-  return data;
-};
-
-/**
- * Log out the current user — clears local storage and refresh cookie.
+ * Log out user from Firebase and clear local storage.
  */
 export const logoutUser = async () => {
   try {
-    await fetch(`${API_URL}/auth/logout`, {
-      method: 'POST',
-      credentials: 'include',
-    });
-  } catch {
-    // Fire-and-forget — always clear local state regardless of server response
+    await signOut(auth);
+  } catch (err) {
+    console.error('Signout error:', err);
   }
   sessionStorage.removeItem('studybuddy_token');
   sessionStorage.removeItem('userEmail');
   sessionStorage.removeItem('userName');
+  
+  try {
+    await fetch(`${API_URL}/auth/logout`, { method: 'POST' });
+  } catch (e) {
+    // Ignore offline/fail
+  }
 };
 
 /**
@@ -172,7 +159,7 @@ export const fetchMe = async () => {
   return data;
 };
 
-// Legacy alias — kept so any code that still calls sendOTP doesn't break
+// Legacy alias
 export const sendOTP = loginUser;
 
 // ── Study Materials & Uploads ─────────────────────────────────────────────

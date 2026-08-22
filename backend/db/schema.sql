@@ -7,8 +7,7 @@ CREATE TABLE IF NOT EXISTS users (
   id            SERIAL PRIMARY KEY,
   email         VARCHAR(255) UNIQUE NOT NULL,
   name          VARCHAR(255),
-  password_hash VARCHAR(255),
-  is_verified   BOOLEAN     NOT NULL DEFAULT FALSE,
+  firebase_uid  VARCHAR(255) UNIQUE,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -20,12 +19,8 @@ DO $$ BEGIN
     ALTER TABLE users ADD COLUMN name VARCHAR(255);
   END IF;
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns
-                 WHERE table_name='users' AND column_name='password_hash') THEN
-    ALTER TABLE users ADD COLUMN password_hash VARCHAR(255);
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns
-                 WHERE table_name='users' AND column_name='is_verified') THEN
-    ALTER TABLE users ADD COLUMN is_verified BOOLEAN NOT NULL DEFAULT FALSE;
+                 WHERE table_name='users' AND column_name='firebase_uid') THEN
+    ALTER TABLE users ADD COLUMN firebase_uid VARCHAR(255) UNIQUE;
   END IF;
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns
                  WHERE table_name='users' AND column_name='updated_at') THEN

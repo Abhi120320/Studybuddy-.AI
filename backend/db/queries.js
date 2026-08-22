@@ -34,45 +34,77 @@ function compareOTP(otpPlain, storedHash) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
- * Find a user by email (includes password_hash for auth).
+ * Find a user by email.
  * Returns null if not found.
  */
 async function findUserByEmail(email) {
   const emailClean = email.trim().toLowerCase();
   const res = await query(
-    'SELECT id, email, name, password_hash, is_verified FROM users WHERE email = $1',
+    'SELECT id, email, name, firebase_uid FROM users WHERE email = $1',
     [emailClean]
   );
   return res.rows[0] || null;
 }
 
 /**
- * Find a user by ID (safe profile — no password_hash).
+ * Find a user by ID.
  * Returns null if not found.
  */
 async function findUserById(id) {
   const res = await query(
-    'SELECT id, email, name, is_verified, created_at FROM users WHERE id = $1',
+    'SELECT id, email, name, firebase_uid, created_at FROM users WHERE id = $1',
     [id]
   );
   return res.rows[0] || null;
 }
 
 /**
- * Register a new user with a hashed password.
- * Returns the new user row.
- * Throws on duplicate email (pg error code 23505).
+ * Find a user by Firebase UID.
  */
-async function createUser(email, name, passwordHash) {
-  const emailClean = email.trim().toLowerCase();
+async function findUserByFirebaseUid(uid) {
   const res = await query(
-    `INSERT INTO users (email, name, password_hash, is_verified)
-     VALUES ($1, $2, $3, FALSE)
-     RETURNING id, email, name, is_verified`,
-    [emailClean, name ? name.trim() : null, passwordHash]
+    'SELECT id, email, name, firebase_uid FROM users WHERE firebase_uid = $1',
+    [uid]
   );
-  const user = res.rows[0];
+  return res.rows[0] || null;
+}
 
+/**
+ * Find or create a user by Firebase UID, linking existing email accounts if present.
+ */
+async function findOrCreateUserByFirebase(uid, email, name) {
+  const emailClean = email.trim().toLowerCase();
+  
+  // 1. Try finding by firebase_uid
+  let user = await findUserByFirebaseUid(uid);
+  if (user) return user;
+  
+  // 2. Try finding by email and linking if not already linked
+  const emailRes = await query(
+    'SELECT id, email, name, firebase_uid FROM users WHERE email = $1',
+    [emailClean]
+  );
+  
+  if (emailRes.rows.length) {
+    user = emailRes.rows[0];
+    await query(
+      'UPDATE users SET firebase_uid = $1, name = COALESCE(name, $2), updated_at = NOW() WHERE id = $3',
+      [uid, name, user.id]
+    );
+    user.firebase_uid = uid;
+    if (name && !user.name) user.name = name;
+    return user;
+  }
+  
+  // 3. Create a new user record
+  const insertRes = await query(
+    `INSERT INTO users (email, name, firebase_uid)
+     VALUES ($1, $2, $3)
+     RETURNING id, email, name, firebase_uid`,
+    [emailClean, name ? name.trim() : null, uid]
+  );
+  user = insertRes.rows[0];
+  
   // Auto-seed the General subject folder for new users
   await query(
     `INSERT INTO subjects (user_id, name, color, shadow, emoji)
@@ -80,43 +112,12 @@ async function createUser(email, name, passwordHash) {
      ON CONFLICT (user_id, name) DO NOTHING`,
     [user.id]
   );
-
+  
   return user;
 }
 
 /**
- * Mark a user as verified (after first successful OTP).
- */
-async function markUserVerified(userId) {
-  await query(
-    `UPDATE users SET is_verified = TRUE, updated_at = NOW() WHERE id = $1`,
-    [userId]
-  );
-}
-
-/**
- * Update a user's password hash (used for password reset / first-time set).
- */
-async function updateUserPassword(userId, passwordHash) {
-  await query(
-    `UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2`,
-    [passwordHash, userId]
-  );
-}
-
-/**
- * Update user registration details (used when re-registering an unverified account).
- */
-async function updateUserRegistration(userId, name, passwordHash) {
-  await query(
-    `UPDATE users SET name = $1, password_hash = $2, updated_at = NOW() WHERE id = $3`,
-    [name, passwordHash, userId]
-  );
-}
-
-/**
- * Legacy: find-or-create user by email (no password).
- * Kept for backward compatibility with existing flows.
+ * Legacy: find-or-create user by email.
  */
 async function findOrCreateUser(email) {
   const emailClean = email.trim().toLowerCase();
@@ -581,10 +582,7 @@ module.exports = {
   // User
   findUserByEmail,
   findUserById,
-  createUser,
-  markUserVerified,
-  updateUserPassword,
-  updateUserRegistration,
+  findOrCreateUserByFirebase,
   findOrCreateUser,        // legacy
   // Login OTP (hardened)
   createLoginOTP,

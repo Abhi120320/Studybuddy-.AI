@@ -19,6 +19,9 @@ const PAGE_META = {
   studyplan: { title: 'Study plan', subtitle: 'Create an exam study schedule' },
 };
 
+import { onAuthStateChanged } from 'firebase/auth';
+import { auth } from './firebase';
+
 function App() {
   const [currentPage, setCurrentPage] = useState('landing');
   const [sidebarOpen, setSidebarOpen]   = useState(false);
@@ -37,6 +40,36 @@ function App() {
     });
   }
 
+  // 1. Listen to Firebase auth state changes
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
+      if (fbUser && fbUser.emailVerified) {
+        const token = await fbUser.getIdToken();
+        sessionStorage.setItem('studybuddy_token', token);
+        sessionStorage.setItem('userEmail', fbUser.email || '');
+        sessionStorage.setItem('userName', fbUser.displayName || fbUser.email?.split('@')[0] || 'Student');
+        refreshUser();
+        
+        const hash = window.location.hash.replace('#', '') || 'landing';
+        if (hash === 'landing' || hash === 'auth') {
+          window.location.hash = 'dashboard';
+        }
+      } else {
+        sessionStorage.removeItem('studybuddy_token');
+        sessionStorage.removeItem('userEmail');
+        sessionStorage.removeItem('userName');
+        
+        const hash = window.location.hash.replace('#', '') || 'landing';
+        if (hash !== 'landing' && hash !== 'auth') {
+          window.location.hash = 'auth';
+        }
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  // 2. Listen to manual hash changes
   useEffect(() => {
     const handleHashChange = () => {
       const hash  = window.location.hash.replace('#', '') || 'landing';
@@ -48,7 +81,7 @@ function App() {
         return;
       }
 
-      refreshUser();          // ← pick up name/email stored after OTP verify
+      refreshUser();
       setCurrentPage(hash);
       setSidebarOpen(false);
     };
