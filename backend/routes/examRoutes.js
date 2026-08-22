@@ -9,7 +9,7 @@ router.post('/', validateExamRequest, async (req, res, next) => {
     const { numQuestions = 10 } = req.body;
 
     // Pass req.user.id to database query helpers
-    const rows = await db.getActiveChunks(req.user.id, 25);
+    const rows = await db.getActiveChunks(req.user.id, 12);
 
     if (!rows.length) {
       return res.status(400).json({ success: false, error: 'Please upload notes first' });

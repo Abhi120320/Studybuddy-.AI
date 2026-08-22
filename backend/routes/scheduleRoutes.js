@@ -9,7 +9,7 @@ router.post('/', validateScheduleRequest, async (req, res, next) => {
     const { daysUntilExam = 7 } = req.body;
 
     // Pass req.user.id to database query helpers
-    const rows = await db.getActiveChunks(req.user.id, 30);
+    const rows = await db.getActiveChunks(req.user.id, 10);
 
     if (!rows.length) {
       return res.status(400).json({ success: false, error: 'Please upload notes first' });

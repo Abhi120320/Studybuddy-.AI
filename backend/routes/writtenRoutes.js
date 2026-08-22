@@ -15,7 +15,7 @@ router.post('/', async (req, res, next) => {
     }
 
     // Pass req.user.id to database query helpers
-    const rows = await db.getActiveChunks(req.user.id, 20);
+    const rows = await db.getActiveChunks(req.user.id, 10);
 
     if (!rows.length) {
       return res.status(400).json({

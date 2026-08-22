@@ -10,8 +10,8 @@ router.post('/', validateQuestionRequest, async (req, res, next) => {
 
     // Pass req.user.id to database query helpers
     const rows = topic
-      ? await db.searchChunks(req.user.id, `${topic} ${difficulty}`, 10)
-      : await db.getActiveChunks(req.user.id, 20);
+      ? await db.searchChunks(req.user.id, `${topic} ${difficulty}`, 8)
+      : await db.getActiveChunks(req.user.id, 10);
 
     if (!rows.length) {
       return res.status(400).json({ success: false, error: 'Please upload notes first' });
