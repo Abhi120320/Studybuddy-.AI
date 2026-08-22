@@ -239,33 +239,27 @@ Format JSON only:
     }
   }
 
-  async evaluateWrittenAnswer(notes, imageBase64, mimeType) {
-    const prompt = `You are a strict and helpful examiner. Analyze the provided image containing a student's handwritten answer. Compare it strictly to the provided study notes.
+  async evaluateWrittenAnswer(notes, studentAnswerText) {
+    const prompt = `You are a strict and helpful examiner. Analyze a student's handwritten answer (transcribed via OCR). Compare it strictly to the provided study notes.
     
 STUDY NOTES:
 ${notes}
+
+STUDENT'S TRANSCRIPTION:
+${studentAnswerText}
 
 Please evaluate the answer out of 10 marks. Provide a JSON response only.
 
 Format JSON only:
 {
   "score": 8,
-  "transcription": "What the student wrote (best effort)",
+  "transcription": "Cleaned up version of what the student wrote based on the raw OCR text",
   "correctPoints": ["Point 1", "Point 2"],
   "mistakes": ["Mistake 1", "Missing point 2"],
   "feedback": "Overall feedback and how to improve."
 }`;
 
-    const imageParts = [
-      {
-        inlineData: {
-          data: imageBase64,
-          mimeType: mimeType
-        }
-      }
-    ];
-
-    const response = await this.generateContent(prompt, 0.3, true, imageParts);
+    const response = await this.generateContent(prompt, 0.3, true);
     try {
       return JSON.parse(response);
     } catch (e) {

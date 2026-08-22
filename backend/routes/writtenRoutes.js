@@ -4,6 +4,10 @@ const fs      = require('fs');
 const groq    = require('../services/groqService');
 const db      = require('../db/queries');
 
+const { exec } = require('child_process');
+const util = require('util');
+const execPromise = util.promisify(exec);
+
 router.post('/', async (req, res, next) => {
   try {
     if (!req.file) {
@@ -20,11 +24,18 @@ router.post('/', async (req, res, next) => {
       });
     }
 
-    const notes       = db.chunksToContext(rows);
-    const imageBase64 = fs.readFileSync(req.file.path, { encoding: 'base64' });
-    const mimeType    = req.file.mimetype;
+    const notes = db.chunksToContext(rows);
+    
+    // Perform local OCR on the uploaded image using Tesseract CLI
+    let extractedText = '';
+    try {
+      const { stdout } = await execPromise(`tesseract "${req.file.path}" stdout -l eng`);
+      extractedText = stdout.trim();
+    } catch (ocrErr) {
+      console.warn('⚠️ OCR extraction failed:', ocrErr.message);
+    }
 
-    const evaluation = await groq.evaluateWrittenAnswer(notes, imageBase64, mimeType);
+    const evaluation = await groq.evaluateWrittenAnswer(notes, extractedText || '(Could not extract text from handwriting)');
 
     fs.unlink(req.file.path, err => {
       if (err) console.warn('Failed to delete image:', err.message);
