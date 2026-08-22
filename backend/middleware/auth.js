@@ -4,8 +4,9 @@
  */
 'use strict';
 
-const admin = require('../config/firebase-admin');
-const db    = require('../db/queries');
+const admin    = require('../config/firebase-admin');
+const { getAuth } = require('firebase-admin/auth');
+const db       = require('../db/queries');
 
 /**
  * Express middleware: verifies Bearer Firebase ID Token from Authorization header.
@@ -21,7 +22,7 @@ async function authenticateToken(req, res, next) {
   }
 
   try {
-    const decodedToken = await admin.auth().verifyIdToken(token);
+    const decodedToken = await getAuth().verifyIdToken(token);
     
     // Automatically map Firebase UID to PostgreSQL serial ID
     const user = await db.findOrCreateUserByFirebase(
