@@ -1,22 +1,40 @@
 /**
  * services/emailService.js
  * Reusable email service for StudyBuddy AI.
- * Reads SMTP config from environment variables — never hardcoded.
+ * Uses Nodemailer (SMTP) — configured via environment variables.
  * Never logs OTP values or credentials.
  */
 'use strict';
 
-const { Resend } = require('resend');
+const nodemailer = require('nodemailer');
 
 /**
- * Build a Resend client lazily so env vars are resolved at call time.
+ * Build a Nodemailer transporter lazily so env vars are resolved at call time.
+ * Supports Gmail, Outlook, or any custom SMTP provider.
  */
-function getResendClient() {
-  const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) {
-    return null; // Resend API key not configured
+function getTransporter() {
+  const host = process.env.SMTP_HOST;
+  const port = parseInt(process.env.SMTP_PORT || '587', 10);
+  const user = process.env.SMTP_USER;
+  const pass = process.env.SMTP_PASS;
+
+  // If no SMTP config — return null (handled in callers)
+  if (!user || !pass) return null;
+
+  // Gmail shortcut: if no host provided, use Gmail defaults
+  if (!host) {
+    return nodemailer.createTransport({
+      service: 'gmail',
+      auth: { user, pass },
+    });
   }
-  return new Resend(apiKey);
+
+  return nodemailer.createTransport({
+    host,
+    port,
+    secure: port === 465, // true for 465, false for 587
+    auth: { user, pass },
+  });
 }
 
 function buildOTPEmailHTML(appName, title, leadText, digits, expiryMins) {
@@ -33,69 +51,24 @@ function buildOTPEmailHTML(appName, title, leadText, digits, expiryMins) {
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@800;900&family=Plus+Jakarta+Sans:wght@500;700;800&display=swap" rel="stylesheet">
   <style>
-    /* Mobile responsiveness override */
     @media only screen and (max-width: 480px) {
-      .main-card {
-        width: 100% !important;
-        border-radius: 16px !important;
-      }
-      .card-padding {
-        padding: 24px 16px !important;
-      }
-      .digit-box {
-        width: 36px !important;
-        height: 48px !important;
-        font-size: 20px !important;
-        line-height: 48px !important;
-      }
-      .digit-table {
-        border-spacing: 4px !important;
-      }
-      .brand-title {
-        font-size: 18px !important;
-      }
+      .main-card { width: 100% !important; border-radius: 16px !important; }
+      .card-padding { padding: 24px 16px !important; }
+      .digit-box { width: 36px !important; height: 48px !important; font-size: 20px !important; line-height: 48px !important; }
+      .digit-table { border-spacing: 4px !important; }
+      .brand-title { font-size: 18px !important; }
     }
-
-    /* Dark mode override */
     @media (prefers-color-scheme: dark) {
-      body {
-        background-color: #0f172a !important;
-      }
-      .email-bg {
-        background-color: #0f172a !important;
-      }
-      .main-card {
-        background-color: #1e293b !important;
-        border-color: #ffffff !important;
-        box-shadow: 4px 4px 0px #ffffff !important;
-      }
-      .card-padding {
-        background-color: #1e293b !important;
-      }
-      .digit-box {
-        background-color: #1e293b !important;
-        color: #ffffff !important;
-        border-color: #a78bfa !important;
-        box-shadow: 2px 2px 0px #a78bfa !important;
-      }
-      .warning-box {
-        background-color: #312e81 !important;
-        border-color: #ffffff !important;
-        box-shadow: 2px 2px 0px #ffffff !important;
-      }
-      .warning-text {
-        color: #e2e8f0 !important;
-      }
-      .warning-highlight {
-        color: #fcd34d !important;
-      }
-      .text-slate {
-        color: #cbd5e1 !important;
-      }
-      .card-footer {
-        background-color: #1e293b !important;
-        border-top-color: #334155 !important;
-      }
+      body { background-color: #0f172a !important; }
+      .email-bg { background-color: #0f172a !important; }
+      .main-card { background-color: #1e293b !important; border-color: #ffffff !important; box-shadow: 4px 4px 0px #ffffff !important; }
+      .card-padding { background-color: #1e293b !important; }
+      .digit-box { background-color: #1e293b !important; color: #ffffff !important; border-color: #a78bfa !important; box-shadow: 2px 2px 0px #a78bfa !important; }
+      .warning-box { background-color: #312e81 !important; border-color: #ffffff !important; box-shadow: 2px 2px 0px #ffffff !important; }
+      .warning-text { color: #e2e8f0 !important; }
+      .warning-highlight { color: #fcd34d !important; }
+      .text-slate { color: #cbd5e1 !important; }
+      .card-footer { background-color: #1e293b !important; border-top-color: #334155 !important; }
     }
   </style>
 </head>
@@ -103,16 +76,13 @@ function buildOTPEmailHTML(appName, title, leadText, digits, expiryMins) {
   <table class="email-bg" width="100%" cellpadding="0" cellspacing="0" style="background-color:#fffdf5;padding:40px 20px;">
     <tr>
       <td align="center">
-        <!-- Main Card -->
         <table class="main-card" width="520" cellpadding="0" cellspacing="0"
                style="background:#ffffff;border:3px solid #1e293b;border-radius:24px;box-shadow:6px 6px 0px #1e293b;overflow:hidden;max-width:100%;border-collapse:separate;">
-
-          <!-- Window Header (Neobrutalist Title Bar) -->
+          <!-- Header -->
           <tr>
             <td style="background:#8b5cf6;padding:20px 24px;text-align:left;border-bottom:3px solid #1e293b;">
               <table cellpadding="0" cellspacing="0" style="border-collapse:collapse;width:100%;">
                 <tr>
-                  <!-- Left: Retro Window Dots -->
                   <td valign="middle" style="width:46px;padding:0;">
                     <table cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
                       <tr>
@@ -124,7 +94,6 @@ function buildOTPEmailHTML(appName, title, leadText, digits, expiryMins) {
                       </tr>
                     </table>
                   </td>
-                  <!-- Middle: Custom Logo Mark -->
                   <td valign="middle" style="width:32px;padding:0;">
                     <table cellpadding="0" cellspacing="0" style="border-collapse:collapse;width:32px;">
                       <tr>
@@ -134,7 +103,6 @@ function buildOTPEmailHTML(appName, title, leadText, digits, expiryMins) {
                       </tr>
                     </table>
                   </td>
-                  <!-- Right: Brand Title Text -->
                   <td class="brand-title" valign="middle" style="padding-left:12px;font-family:'Outfit',sans-serif;font-size:20px;font-weight:800;color:#ffffff;line-height:1;">
                     StudyBuddy<span style="color:#fbbf24;">.ai</span>
                   </td>
@@ -142,8 +110,7 @@ function buildOTPEmailHTML(appName, title, leadText, digits, expiryMins) {
               </table>
             </td>
           </tr>
-
-          <!-- Card Body -->
+          <!-- Body -->
           <tr>
             <td class="card-padding" style="padding:40px 32px;background:#ffffff;">
               <h2 style="margin:0 0 16px;color:#8b5cf6;font-size:22px;font-weight:800;font-family:'Outfit',sans-serif;">
@@ -152,39 +119,25 @@ function buildOTPEmailHTML(appName, title, leadText, digits, expiryMins) {
               <p class="text-slate" style="margin:0 0 32px;color:#1e293b;font-size:15px;line-height:1.6;font-weight:500;">
                 ${leadText}
               </p>
-
-              <!-- OTP Verification Boxes Box -->
+              <!-- OTP Boxes -->
               <div style="margin:0 auto 32px;text-align:center;">
                 <p class="text-slate" style="margin:0 0 12px;color:#64748b;font-size:12px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;">
                   Your verification code
                 </p>
                 <table class="digit-table" align="center" cellpadding="0" cellspacing="0" style="margin:0 auto;border-collapse:separate;border-spacing:8px;">
                   <tr>
-                    <td class="digit-box" align="center" valign="middle" style="width:44px;height:56px;background:#ffffff;border:2px solid #8b5cf6;border-radius:8px;box-shadow:3px 3px 0px #8b5cf6;font-size:24px;font-weight:900;color:#1e293b;font-family:'Outfit',sans-serif;line-height:56px;padding:0;">
-                      ${digits[0]}
-                    </td>
-                    <td class="digit-box" align="center" valign="middle" style="width:44px;height:56px;background:#ffffff;border:2px solid #8b5cf6;border-radius:8px;box-shadow:3px 3px 0px #8b5cf6;font-size:24px;font-weight:900;color:#1e293b;font-family:'Outfit',sans-serif;line-height:56px;padding:0;">
-                      ${digits[1]}
-                    </td>
-                    <td class="digit-box" align="center" valign="middle" style="width:44px;height:56px;background:#ffffff;border:2px solid #8b5cf6;border-radius:8px;box-shadow:3px 3px 0px #8b5cf6;font-size:24px;font-weight:900;color:#1e293b;font-family:'Outfit',sans-serif;line-height:56px;padding:0;">
-                      ${digits[2]}
-                    </td>
-                    <td class="digit-box" align="center" valign="middle" style="width:44px;height:56px;background:#ffffff;border:2px solid #8b5cf6;border-radius:8px;box-shadow:3px 3px 0px #8b5cf6;font-size:24px;font-weight:900;color:#1e293b;font-family:'Outfit',sans-serif;line-height:56px;padding:0;">
-                      ${digits[3]}
-                    </td>
-                    <td class="digit-box" align="center" valign="middle" style="width:44px;height:56px;background:#ffffff;border:2px solid #8b5cf6;border-radius:8px;box-shadow:3px 3px 0px #8b5cf6;font-size:24px;font-weight:900;color:#1e293b;font-family:'Outfit',sans-serif;line-height:56px;padding:0;">
-                      ${digits[4]}
-                    </td>
-                    <td class="digit-box" align="center" valign="middle" style="width:44px;height:56px;background:#ffffff;border:2px solid #8b5cf6;border-radius:8px;box-shadow:3px 3px 0px #8b5cf6;font-size:24px;font-weight:900;color:#1e293b;font-family:'Outfit',sans-serif;line-height:56px;padding:0;">
-                      ${digits[5]}
-                    </td>
+                    <td class="digit-box" align="center" valign="middle" style="width:44px;height:56px;background:#ffffff;border:2px solid #8b5cf6;border-radius:8px;box-shadow:3px 3px 0px #8b5cf6;font-size:24px;font-weight:900;color:#1e293b;font-family:'Outfit',sans-serif;line-height:56px;padding:0;">${digits[0]}</td>
+                    <td class="digit-box" align="center" valign="middle" style="width:44px;height:56px;background:#ffffff;border:2px solid #8b5cf6;border-radius:8px;box-shadow:3px 3px 0px #8b5cf6;font-size:24px;font-weight:900;color:#1e293b;font-family:'Outfit',sans-serif;line-height:56px;padding:0;">${digits[1]}</td>
+                    <td class="digit-box" align="center" valign="middle" style="width:44px;height:56px;background:#ffffff;border:2px solid #8b5cf6;border-radius:8px;box-shadow:3px 3px 0px #8b5cf6;font-size:24px;font-weight:900;color:#1e293b;font-family:'Outfit',sans-serif;line-height:56px;padding:0;">${digits[2]}</td>
+                    <td class="digit-box" align="center" valign="middle" style="width:44px;height:56px;background:#ffffff;border:2px solid #8b5cf6;border-radius:8px;box-shadow:3px 3px 0px #8b5cf6;font-size:24px;font-weight:900;color:#1e293b;font-family:'Outfit',sans-serif;line-height:56px;padding:0;">${digits[3]}</td>
+                    <td class="digit-box" align="center" valign="middle" style="width:44px;height:56px;background:#ffffff;border:2px solid #8b5cf6;border-radius:8px;box-shadow:3px 3px 0px #8b5cf6;font-size:24px;font-weight:900;color:#1e293b;font-family:'Outfit',sans-serif;line-height:56px;padding:0;">${digits[4]}</td>
+                    <td class="digit-box" align="center" valign="middle" style="width:44px;height:56px;background:#ffffff;border:2px solid #8b5cf6;border-radius:8px;box-shadow:3px 3px 0px #8b5cf6;font-size:24px;font-weight:900;color:#1e293b;font-family:'Outfit',sans-serif;line-height:56px;padding:0;">${digits[5]}</td>
                   </tr>
                 </table>
                 <p class="text-slate" style="margin:16px 0 0;color:#64748b;font-size:13px;font-weight:500;">
                   Expires in <strong style="color:#8b5cf6;font-weight:700;">${expiryMins} minutes</strong>
                 </p>
               </div>
-
               <!-- Security Notice -->
               <table class="warning-box" cellpadding="0" cellspacing="0" style="width:100%;background:#fffbeb;border:2px solid #1e293b;border-radius:12px;box-shadow:3px 3px 0px #1e293b;margin:0 0 32px;border-collapse:collapse;">
                 <tr>
@@ -197,14 +150,12 @@ function buildOTPEmailHTML(appName, title, leadText, digits, expiryMins) {
                   </td>
                 </tr>
               </table>
-
               <p class="text-slate" style="margin:0;color:#64748b;font-size:12px;line-height:1.6;text-align:center;font-weight:500;">
                 This code is valid for one use only and will expire in ${expiryMins} minutes.
               </p>
             </td>
           </tr>
-
-          <!-- Card Footer -->
+          <!-- Footer -->
           <tr>
             <td class="card-footer" style="padding:24px 32px;border-top:2px solid #e2e8f0;background:#ffffff;text-align:center;">
               <p style="margin:0;color:#64748b;font-size:12px;font-weight:500;line-height:1;">
@@ -221,121 +172,75 @@ function buildOTPEmailHTML(appName, title, leadText, digits, expiryMins) {
 }
 
 /**
- * Send a 6-digit OTP verification email.
- *
- * @param {string} email       - Recipient email address
- * @param {string} otp         - Plaintext OTP (only used here, never logged)
- * @param {number} expiryMins  - OTP validity period in minutes (default: 5)
- * @returns {Promise<void>}
+ * Send a 6-digit OTP verification email via SMTP.
  */
 async function sendOTPEmail(email, otp, expiryMins = 5) {
-  const appName   = 'StudyBuddy AI';
-  const fromAddr  = process.env.RESEND_FROM || `StudyBuddy AI <onboarding@resend.dev>`;
+  const appName  = 'StudyBuddy AI';
+  const fromAddr = process.env.SMTP_FROM || process.env.SMTP_USER || 'noreply@studybuddy.ai';
 
-  const resend = getResendClient();
+  const transporter = getTransporter();
 
-  if (!resend) {
-    // Resend not configured — log OTP to console ONLY in development
+  if (!transporter) {
     if (process.env.NODE_ENV !== 'production') {
-      console.log(`⚠️  Resend not configured. [DEV ONLY] OTP for ${email}: ${otp}`);
+      console.log(`⚠️  SMTP not configured. [DEV ONLY] OTP for ${email}: ${otp}`);
     } else {
-      console.error(`❌ Resend not configured — cannot send OTP email to ${email}`);
+      console.error(`❌ SMTP not configured — cannot send OTP email to ${email}`);
       throw new Error('Email service is not configured. Contact support.');
     }
     return;
   }
 
-  const otpStr = String(otp || '');
-  const digits = [];
-  for (let i = 0; i < 6; i++) {
-    digits.push(otpStr[i] || '-');
-  }
-
+  const otpStr  = String(otp || '');
+  const digits  = Array.from({ length: 6 }, (_, i) => otpStr[i] || '-');
   const leadText = `You requested a login verification code for your ${appName} account. Use the code below to complete your sign-in.`;
-  const html = buildOTPEmailHTML(appName, `${appName} — Verification Code`, leadText, digits, expiryMins);
+  const html    = buildOTPEmailHTML(appName, `${appName} — Verification Code`, leadText, digits, expiryMins);
+  const text    = `${appName} — Verification Code\n\nYour login verification code is: ${otp}\n\nThis code expires in ${expiryMins} minutes.\n\nSECURITY NOTICE: Never share this code with anyone.`;
 
-  const text = `
-${appName} — Verification Code
-
-Your login verification code is: ${otp}
-
-This code expires in ${expiryMins} minutes.
-
-SECURITY NOTICE: Never share this code with anyone.
-${appName} will never ask for your verification code by phone, chat, or email.
-If you did not request this code, you can safely ignore this email.
-  `.trim();
-
-  const { error } = await resend.emails.send({
-    from   : fromAddr,
+  await transporter.sendMail({
+    from   : `"${appName}" <${fromAddr}>`,
     to     : email,
     subject: `${otp} is your ${appName} verification code`,
     text,
     html,
   });
 
-  if (error) {
-    console.error('Resend email send error:', error);
-    throw new Error(error.message || 'Failed to send verification email via Resend.');
-  }
-
-  // Log delivery confirmation without leaking OTP
-  console.log(`📧 OTP email delivered to ${email} (expires in ${expiryMins}m)`);
+  console.log(`📧 OTP email sent to ${email} via SMTP (expires in ${expiryMins}m)`);
 }
 
+/**
+ * Send a password reset OTP email via SMTP.
+ */
 async function sendPasswordResetEmail(email, otp, expiryMins = 5) {
-  const appName   = 'StudyBuddy AI';
-  const fromAddr  = process.env.RESEND_FROM || `StudyBuddy AI <onboarding@resend.dev>`;
+  const appName  = 'StudyBuddy AI';
+  const fromAddr = process.env.SMTP_FROM || process.env.SMTP_USER || 'noreply@studybuddy.ai';
 
-  const resend = getResendClient();
+  const transporter = getTransporter();
 
-  if (!resend) {
-    // Resend not configured — log OTP to console ONLY in development
+  if (!transporter) {
     if (process.env.NODE_ENV !== 'production') {
-      console.log(`⚠️  Resend not configured. [DEV ONLY] Password Reset OTP for ${email}: ${otp}`);
+      console.log(`⚠️  SMTP not configured. [DEV ONLY] Password Reset OTP for ${email}: ${otp}`);
     } else {
-      console.error(`❌ Resend not configured — cannot send password reset email to ${email}`);
+      console.error(`❌ SMTP not configured — cannot send password reset email to ${email}`);
       throw new Error('Email service is not configured. Contact support.');
     }
     return;
   }
 
-  const otpStr = String(otp || '');
-  const digits = [];
-  for (let i = 0; i < 6; i++) {
-    digits.push(otpStr[i] || '-');
-  }
-
+  const otpStr   = String(otp || '');
+  const digits   = Array.from({ length: 6 }, (_, i) => otpStr[i] || '-');
   const leadText = `You requested a password reset code for your ${appName} account. Use the code below to complete your password reset.`;
-  const html = buildOTPEmailHTML(appName, `${appName} — Reset Password`, leadText, digits, expiryMins);
+  const html     = buildOTPEmailHTML(appName, `${appName} — Reset Password`, leadText, digits, expiryMins);
+  const text     = `${appName} — Reset Password\n\nYour password reset code is: ${otp}\n\nThis code expires in ${expiryMins} minutes.\n\nSECURITY NOTICE: Never share this code with anyone.`;
 
-  const text = `
-${appName} — Reset Password
-
-Your password reset verification code is: ${otp}
-
-This code expires in ${expiryMins} minutes.
-
-SECURITY NOTICE: Never share this code with anyone.
-${appName} will never ask for your verification code by phone, chat, or email.
-If you did not request this code, you can safely ignore this email.
-  `.trim();
-
-  const { error } = await resend.emails.send({
-    from   : fromAddr,
+  await transporter.sendMail({
+    from   : `"${appName}" <${fromAddr}>`,
     to     : email,
     subject: `${otp} is your ${appName} password reset code`,
     text,
     html,
   });
 
-  if (error) {
-    console.error('Resend reset email send error:', error);
-    throw new Error(error.message || 'Failed to send password reset email via Resend.');
-  }
-
-  // Log delivery confirmation without leaking OTP
-  console.log(`📧 Password reset email delivered to ${email} (expires in ${expiryMins}m)`);
+  console.log(`📧 Password reset email sent to ${email} via SMTP (expires in ${expiryMins}m)`);
 }
 
 module.exports = { sendOTPEmail, sendPasswordResetEmail };
