@@ -24,16 +24,20 @@ function getTransporter() {
   // Gmail shortcut: if no host provided, use Gmail defaults
   if (!host) {
     return nodemailer.createTransport({
-      service: 'gmail',
-      auth: { user, pass },
+      service          : 'gmail',
+      auth             : { user, pass },
+      connectionTimeout: 5000, // fail fast instead of hanging
+      socketTimeout    : 10000,
     });
   }
 
   return nodemailer.createTransport({
     host,
     port,
-    secure: port === 465, // true for 465, false for 587
-    auth: { user, pass },
+    secure           : port === 465,
+    auth             : { user, pass },
+    connectionTimeout: 5000,
+    socketTimeout    : 10000,
   });
 }
 
