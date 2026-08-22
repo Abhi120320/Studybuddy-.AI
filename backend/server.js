@@ -128,13 +128,15 @@ app.get('/health', async (req, res) => {
     const dbQueries = require('./db/queries');
     const hasNotes = await dbQueries.hasActiveNotes();
     res.json({
-      status:      'Server running',
-      notesLoaded: hasNotes,
-      db:          'connected',
-      pid:         process.pid,
-      uptime:      Math.floor(process.uptime()),
-      version:     config.groqModel,
-      timestamp:   new Date().toISOString(),
+      status:           'Server running',
+      notesLoaded:      hasNotes,
+      db:               'connected',
+      pid:              process.pid,
+      uptime:           Math.floor(process.uptime()),
+      version:          config.groqModel,
+      smtp_configured:  !!(process.env.SMTP_USER && process.env.SMTP_PASS),
+      smtp_user:        process.env.SMTP_USER ? process.env.SMTP_USER.slice(0,6)+'***' : 'NOT SET',
+      timestamp:        new Date().toISOString(),
     });
   } catch (err) {
     res.status(503).json({
