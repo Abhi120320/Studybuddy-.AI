@@ -10,15 +10,14 @@ router.post('/', validateSummaryRequest, async (req, res, next) => {
 
     // Pass req.user.id to database query helpers
     const rows = topic
-      ? await db.searchChunks(req.user.id, topic, 12)
-      : await db.getActiveChunks(req.user.id, 25);
+      ? await db.searchChunks(req.user.id, topic, 15)
+      : await db.getActiveChunks(req.user.id, 20);
 
     if (!rows.length) {
       return res.status(400).json({ success: false, error: 'Please upload notes first' });
     }
 
-    const notes   = db.chunksToContext(rows);
-    const summary = await groq.generateSummary(notes, topic || 'all topics');
+    const summary = await groq.generateSummary(rows, topic || 'all topics');
     res.json({ success: true, summary });
   } catch (err) { next(err); }
 });

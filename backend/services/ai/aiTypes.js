@@ -1,0 +1,25 @@
+/**
+ * services/ai/aiTypes.js
+ * Centralized task type definitions for the AI Model Router.
+ */
+'use strict';
+
+const AI_TASKS = {
+  CHAT: 'CHAT',
+  SIMPLE_QA: 'SIMPLE_QA',
+  MCQ_GENERATION: 'MCQ_GENERATION',
+  QUIZ_GENERATION: 'QUIZ_GENERATION',
+  FLASHCARD_GENERATION: 'FLASHCARD_GENERATION',
+  VIVA: 'VIVA',
+  SUMMARY: 'SUMMARY',
+  STUDY_PLAN: 'STUDY_PLAN',
+  MOCK_EXAM: 'MOCK_EXAM',
+  COMPLEX_QA: 'COMPLEX_QA',
+  DOCUMENT_ANALYSIS: 'DOCUMENT_ANALYSIS',
+  ANSWER_EVALUATION: 'ANSWER_EVALUATION',
+  RAG_SYNTHESIS: 'RAG_SYNTHESIS'
+};
+
+module.exports = {
+  AI_TASKS
+};

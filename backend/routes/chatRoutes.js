@@ -9,14 +9,13 @@ router.post('/', validateChatRequest, async (req, res, next) => {
     const { question, conversationHistory = [] } = req.body;
 
     // Pass req.user.id to database query helpers
-    const rows = await db.searchChunks(req.user.id, question, 8);
+    const rows = await db.searchChunks(req.user.id, question, 12);
 
     if (!rows.length) {
       return res.status(400).json({ success: false, error: 'Please upload notes first' });
     }
 
-    const notes  = db.chunksToContext(rows);
-    const answer = await groq.chatWithNotes(notes, conversationHistory, question);
+    const answer = await groq.chatWithNotes(rows, conversationHistory, question);
     res.json({ success: true, answer });
   } catch (err) { next(err); }
 });

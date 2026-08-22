@@ -8,7 +8,7 @@ router.post('/generate', async (req, res, next) => {
   try {
     const { numQuestions = 3 } = req.body;
     // Pass req.user.id to database query helpers
-    const rows = await db.getActiveChunks(req.user.id, 20);
+    const rows = await db.getActiveChunks(req.user.id, 15);
 
     if (!rows.length) {
       return res.status(400).json({
@@ -17,8 +17,7 @@ router.post('/generate', async (req, res, next) => {
       });
     }
 
-    const notes = db.chunksToContext(rows);
-    const data  = await groq.generateVivaQuestions(notes, numQuestions);
+    const data  = await groq.generateVivaQuestions(rows, numQuestions);
     res.json({ success: true, questions: data.questions || [] });
   } catch (err) { next(err); }
 });
@@ -32,7 +31,7 @@ router.post('/evaluate', async (req, res, next) => {
     }
 
     // Pass req.user.id to database query helpers
-    const rows = await db.searchChunks(req.user.id, question, 6);
+    const rows = await db.searchChunks(req.user.id, question, 10);
 
     if (!rows.length) {
       return res.status(400).json({
@@ -41,8 +40,7 @@ router.post('/evaluate', async (req, res, next) => {
       });
     }
 
-    const notes      = db.chunksToContext(rows);
-    const evaluation = await groq.evaluateVivaAnswer(notes, question, answer);
+    const evaluation = await groq.evaluateVivaAnswer(rows, question, answer);
     res.json({ success: true, evaluation });
   } catch (err) { next(err); }
 });

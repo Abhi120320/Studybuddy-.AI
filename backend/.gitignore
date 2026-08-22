@@ -23,3 +23,6 @@ Thumbs.db
 *.swp
 *.swo
 
+# Firebase secrets
+config/service-account.json
+

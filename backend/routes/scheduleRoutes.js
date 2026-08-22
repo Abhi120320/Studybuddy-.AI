@@ -9,14 +9,13 @@ router.post('/', validateScheduleRequest, async (req, res, next) => {
     const { daysUntilExam = 7 } = req.body;
 
     // Pass req.user.id to database query helpers
-    const rows = await db.getActiveChunks(req.user.id, 10);
+    const rows = await db.getActiveChunks(req.user.id, 15);
 
     if (!rows.length) {
       return res.status(400).json({ success: false, error: 'Please upload notes first' });
     }
 
-    const notes        = db.chunksToContext(rows);
-    const scheduleData = await groq.generateSchedule(notes, daysUntilExam);
+    const scheduleData = await groq.generateSchedule(rows, daysUntilExam);
     res.json({ success: true, ...scheduleData });
   } catch (err) { next(err); }
 });

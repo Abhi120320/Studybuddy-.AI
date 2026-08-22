@@ -15,7 +15,7 @@ router.post('/', async (req, res, next) => {
     }
 
     // Pass req.user.id to database query helpers
-    const rows = await db.getActiveChunks(req.user.id, 10);
+    const rows = await db.getActiveChunks(req.user.id, 15);
 
     if (!rows.length) {
       return res.status(400).json({
@@ -23,8 +23,6 @@ router.post('/', async (req, res, next) => {
         error: 'No active notes found. Please upload study material first.',
       });
     }
-
-    const notes = db.chunksToContext(rows);
     
     // Perform local OCR on the uploaded image using Tesseract CLI
     let extractedText = '';
@@ -35,7 +33,7 @@ router.post('/', async (req, res, next) => {
       console.warn('⚠️ OCR extraction failed:', ocrErr.message);
     }
 
-    const evaluation = await groq.evaluateWrittenAnswer(notes, extractedText || '(Could not extract text from handwriting)');
+    const evaluation = await groq.evaluateWrittenAnswer(rows, extractedText || '(Could not extract text from handwriting)');
 
     fs.unlink(req.file.path, err => {
       if (err) console.warn('Failed to delete image:', err.message);
