@@ -15,7 +15,7 @@ if (process.env.FIREBASE_SERVICE_ACCOUNT) {
   try {
     const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
     admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount)
+      credential: admin.cert(serviceAccount)
     });
     console.log('🔥 Firebase Admin SDK initialized successfully via FIREBASE_SERVICE_ACCOUNT env var.');
     initialized = true;
@@ -31,7 +31,7 @@ if (!initialized) {
     try {
       const serviceAccount = require(localKeyPath);
       admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount)
+        credential: admin.cert(serviceAccount)
       });
       console.log('🔥 Firebase Admin SDK initialized successfully via local service-account.json.');
       initialized = true;
