@@ -38,7 +38,7 @@ const {
 
 const router = express.Router();
 
-const BCRYPT_ROUNDS  = 12;
+const BCRYPT_ROUNDS  = 10; // 10 rounds = secure & fast (~4x faster than 12 on shared CPU)
 const OTP_EXPIRY_MIN = 5;     // minutes
 const RESEND_COOLDOWN_S = 60; // seconds between resend requests
 

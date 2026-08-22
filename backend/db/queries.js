@@ -5,10 +5,29 @@
  */
 'use strict';
 
-const { query } = require('./pool');
-const bcrypt    = require('bcryptjs');
+const { query }  = require('./pool');
+const bcrypt     = require('bcryptjs');
+const crypto     = require('crypto');
 
-const BCRYPT_ROUNDS = 12; // cost factor for password & OTP hashing
+const BCRYPT_ROUNDS = 10; // cost factor for password hashing (10 = secure & fast)
+
+/**
+ * Hash a short-lived OTP with SHA-256 (fast, sufficient for 6-digit codes that expire in 5 min).
+ * bcrypt is overkill for OTPs — it adds 1-3 seconds of unnecessary CPU time.
+ */
+function hashOTP(otpPlain) {
+  return crypto.createHash('sha256').update(String(otpPlain)).digest('hex');
+}
+
+function compareOTP(otpPlain, storedHash) {
+  const incoming = crypto.createHash('sha256').update(String(otpPlain)).digest('hex');
+  // Use timingSafeEqual to prevent timing attacks
+  try {
+    return crypto.timingSafeEqual(Buffer.from(incoming, 'hex'), Buffer.from(storedHash, 'hex'));
+  } catch {
+    return false;
+  }
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ── User Queries ──────────────────────────────────────────────────────────
@@ -154,7 +173,8 @@ async function createLoginOTP(userId, otpPlain, expiresAt) {
   // Invalidate any previous OTPs first
   await invalidatePreviousOTPs(userId);
 
-  const otpHash = await bcrypt.hash(otpPlain, BCRYPT_ROUNDS);
+  // SHA-256 is fast and sufficient for short-lived 6-digit OTPs (expire in 5 min)
+  const otpHash = hashOTP(otpPlain);
 
   const res = await query(
     `INSERT INTO login_otps (user_id, otp_hash, expires_at, attempts, verified)
@@ -206,7 +226,7 @@ async function verifyLoginOTP(userId, otpPlain) {
     [otp.id]
   );
 
-  const match = await bcrypt.compare(otpPlain, otp.otp_hash);
+  const match = compareOTP(otpPlain, otp.otp_hash);
 
   if (!match) {
     const remainingAttempts = OTP_MAX_ATTEMPTS - (otp.attempts + 1);
@@ -246,7 +266,7 @@ async function invalidatePreviousResetOTPs(userId) {
  */
 async function createPasswordResetOTP(userId, otpPlain, expiresAt) {
   await invalidatePreviousResetOTPs(userId);
-  const otpHash = await bcrypt.hash(otpPlain, BCRYPT_ROUNDS);
+  const otpHash = hashOTP(otpPlain);
   const res = await query(
     `INSERT INTO password_reset_otps (user_id, otp_hash, expires_at, attempts, verified)
      VALUES ($1, $2, $3, 0, FALSE)
@@ -284,7 +304,7 @@ async function verifyPasswordResetOTP(userId, otpPlain) {
     'UPDATE password_reset_otps SET attempts = attempts + 1 WHERE id = $1',
     [otp.id]
   );
-  const match = await bcrypt.compare(otpPlain, otp.otp_hash);
+  const match = compareOTP(otpPlain, otp.otp_hash);
   if (!match) {
     const remainingAttempts = OTP_MAX_ATTEMPTS - (otp.attempts + 1);
     if (remainingAttempts <= 0) {
