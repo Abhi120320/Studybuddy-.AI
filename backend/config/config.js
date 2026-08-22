@@ -4,8 +4,8 @@ module.exports = {
   port: process.env.PORT || 5000,
   groqApiKey: process.env.GROQ_API_KEY,
   groqApiUrl: process.env.GROQ_API_URL || 'https://api.groq.com/openai/v1/chat/completions',
-  groqModel: process.env.GROQ_MODEL || 'llama-3.3-70b-versatile',
-  groqVisionModel: process.env.GROQ_VISION_MODEL || 'llama-3.2-11b-vision-preview',
+  groqModel: process.env.GROQ_MODEL || 'groq/compound',           // Groq's flagship model
+  groqVisionModel: process.env.GROQ_VISION_MODEL || 'groq/compound', // compound supports vision too
   // LLM Configuration (OpenAI Compatible)
   llmApiKey: process.env.LLM_API_KEY,
   // User requested Qwen 30B 
@@ -16,4 +16,5 @@ module.exports = {
   maxFileSize: 10 * 1024 * 1024, // 10MB
   maxNotesLength: 200000, // Characters to send to AI (approx 50k tokens)
 };
+
 
